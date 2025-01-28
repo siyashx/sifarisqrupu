@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v3/superAdmin")
+@RequestMapping("/api/v5/superAdmin")
 public class SuperAdminController {
 
     private final SuperAdminServiceImpl service;

@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v3/restaurant")
+@RequestMapping("/api/v5/restaurant")
 public class RestaurantController {
 
     private final RestaurantServiceImpl restaurantServiceImpl;

@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v3/login/restaurant")
+@RequestMapping("/api/v5/login/restaurant")
 public class RestaurantLoginController {
 
     private final RestaurantServiceImpl restaurantServiceImpl;
