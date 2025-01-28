@@ -1,4 +1,4 @@
-package com.codesupreme.sifarisqrupu.model.restaurant;
+package com.codesupreme.sifarisqrupu.model.user;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
@@ -15,7 +15,7 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @Data
-public class Restaurant {
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
