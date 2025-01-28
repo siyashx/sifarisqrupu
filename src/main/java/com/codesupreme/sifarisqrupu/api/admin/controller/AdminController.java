@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v5/admin")
 public class AdminController {
@@ -15,6 +17,12 @@ public class AdminController {
 
     public AdminController(AdminServiceImpl adminServiceImpl) {
         this.adminServiceImpl = adminServiceImpl;
+    }
+
+    // List
+    @GetMapping
+    public List<AdminDto> getAllAdmins() {
+        return adminServiceImpl.getAllAdmins();
     }
 
     // Id

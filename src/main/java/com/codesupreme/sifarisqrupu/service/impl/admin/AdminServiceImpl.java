@@ -8,6 +8,8 @@ import org.modelmapper.ModelMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -20,6 +22,20 @@ public class AdminServiceImpl implements AdminServiceInter {
     public AdminServiceImpl(AdminRepository adminRepository, ModelMapper modelMapper) {
         this.adminRepository = adminRepository;
         this.modelMapper = modelMapper;
+    }
+
+
+    @Override
+    public List<AdminDto> getAllAdmins() {
+        List<AdminDto> listDto = new ArrayList<>();
+
+        List<Admin> listEntity = adminRepository.findAll();
+
+        for (Admin entity : listEntity) {
+            AdminDto dto = modelMapper.map(entity, AdminDto.class);
+            listDto.add(dto);
+        }
+        return listDto;
     }
 
     @Override
