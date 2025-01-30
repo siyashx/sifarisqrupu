@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Date;
 import java.util.List;
 
 @NoArgsConstructor
@@ -23,7 +24,6 @@ public class ChatDto {
     private ForwardedMessage forwardedMessage;
     private String userType;
     private String message;
-    private String time;
-    private String date;
+    private Date timestamp;
     private Boolean isCompleted;
 }

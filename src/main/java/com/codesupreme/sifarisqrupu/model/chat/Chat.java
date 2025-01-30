@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Date;
 import java.util.List;
 
 @Entity
@@ -28,8 +29,7 @@ public class Chat {
     private Boolean isForwarded;
     private String userType;
     private String message;
-    private String time;
-    private String date;
+    private Date timestamp;
     private Boolean isCompleted;
 }
 

@@ -25,7 +25,7 @@ public class SuperAdminController {
     }
 
     @GetMapping("/{superAdminId}")
-    public ResponseEntity<SuperAdminDto> getSuperAdminById(@PathVariable("detId") Long id) {
+    public ResponseEntity<SuperAdminDto> getSuperAdminById(@PathVariable("superAdminId") Long id) {
         SuperAdminDto det = service.getSuperAdminById(id);
         if (det != null) {
             return ResponseEntity.ok(det);

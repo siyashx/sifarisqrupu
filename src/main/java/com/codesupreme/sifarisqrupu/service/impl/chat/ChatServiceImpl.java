@@ -81,12 +81,8 @@ public class ChatServiceImpl implements ChatServiceInter {
                 chat.setMessage(chatDto.getMessage());
             }
 
-            if (chatDto.getTime() != null) {
-                chat.setTime(chatDto.getTime());
-            }
-
-            if (chatDto.getDate() != null) {
-                chat.setDate(chatDto.getDate());
+            if (chatDto.getTimestamp() != null) {
+                chat.setTimestamp(chatDto.getTimestamp());
             }
 
             if (chatDto.getIsCompleted() != null) {
