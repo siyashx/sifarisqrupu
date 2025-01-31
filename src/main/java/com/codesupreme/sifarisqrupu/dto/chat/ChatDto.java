@@ -19,9 +19,6 @@ public class ChatDto {
     private Long userId;
     private String username;
     private List<String> isSeenIds;
-    private Boolean isForwarded;
-    @Convert(converter = ForwardedMessageConverter.class)
-    private ForwardedMessage forwardedMessage;
     private String userType;
     private String message;
     private Date timestamp;

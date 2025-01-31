@@ -1,6 +1,5 @@
 package com.codesupreme.sifarisqrupu.model.chat;
 
-import com.codesupreme.sifarisqrupu.dto.chat.ForwardedMessage;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -24,9 +23,7 @@ public class Chat {
 
     private Long userId;
     private String username;
-    private ForwardedMessage forwardedMessage;
     private List<String> isSeenIds;
-    private Boolean isForwarded;
     private String userType;
     private String message;
     private Date timestamp;
