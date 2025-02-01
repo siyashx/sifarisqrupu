@@ -26,7 +26,7 @@ public class Chat {
     private List<String> isSeenIds;
     private String userType;
     private String message;
-    private Date timestamp;
+    private String timestamp;
     private Boolean isCompleted;
 }
 

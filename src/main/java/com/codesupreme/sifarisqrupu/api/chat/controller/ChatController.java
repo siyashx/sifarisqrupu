@@ -37,10 +37,7 @@ public class ChatController {
         return chatServiceImpl.createChat(chatMessageDto);
     }
 
-
-
     // CRUD Operations for Chat
-
     @GetMapping("/chats")
     public ResponseEntity<List<ChatDto>> getAllChat() {
         List<ChatDto> messages = chatServiceImpl.getAllChats();
