@@ -30,8 +30,8 @@ public class ChatController {
     }
 
     // Mesaj gönderimi WebSocket ile yapılacak
-    @MessageMapping("/sendMessage")
-    @SendTo("/topic/public")
+    @MessageMapping("/sendChatMessage")
+    @SendTo("/topic/open")
     public ChatDto sendMessage(@Payload ChatDto chatMessageDto) {
         // Mesajı kaydet ve ardından döndür
         return chatServiceImpl.createChat(chatMessageDto);
