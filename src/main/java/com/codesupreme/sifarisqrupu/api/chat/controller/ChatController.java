@@ -29,12 +29,13 @@ public class ChatController {
         this.messagingTemplate = messagingTemplate;
     }
 
+    // Mesaj gönderimi WebSocket ile yapılacak
     @MessageMapping("/sendChatMessage")
-    public void sendMessage(@Payload ChatDto chatMessageDto) {
-        ChatDto savedMessage = chatServiceImpl.createChat(chatMessageDto);
-        messagingTemplate.convertAndSend("/topic/open", savedMessage);
+    @SendTo("/topic/sifarisqrupu")
+    public ChatDto sendMessage(@Payload ChatDto chatMessageDto) {
+        // Mesajı kaydet ve ardından döndür
+        return chatServiceImpl.createChat(chatMessageDto);
     }
-
 
     // CRUD Operations for Chat
     @GetMapping("/chats")
