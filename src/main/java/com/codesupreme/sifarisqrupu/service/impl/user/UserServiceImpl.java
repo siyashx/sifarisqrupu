@@ -66,6 +66,11 @@ public class UserServiceImpl implements UserServiceInter {
             if (userDto.getOneSignal() != null) {
                 user.setOneSignal(userDto.getOneSignal());
             }
+
+            if (userDto.getUserType() != null) {
+                user.setUserType(userDto.getUserType());
+            }
+
             if (userDto.getName() != null) {
                 user.setName(userDto.getName());
             }
@@ -90,8 +95,16 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setOrderCount(userDto.getOrderCount());
             }
 
+            if (userDto.getIdentifyPhoto() != null) {
+                user.setIdentifyPhoto(userDto.getIdentifyPhoto());
+            }
+
             if (userDto.getOnline() != null) {
                 user.setOnline(userDto.getOnline());
+            }
+
+            if (userDto.getActiveDeviceId() != null) {
+                user.setActiveDeviceId(userDto.getActiveDeviceId());
             }
 
             if (userDto.getExpiryDate() != null) {
@@ -100,6 +113,10 @@ public class UserServiceImpl implements UserServiceInter {
 
             if (userDto.getCreatedDate() != null) {
                 user.setCreatedDate(userDto.getCreatedDate());
+            }
+
+            if (userDto.getIsRequest() != null) {
+                user.setIsRequest(userDto.getIsRequest());
             }
 
             if (userDto.getIsDisable() != null) {

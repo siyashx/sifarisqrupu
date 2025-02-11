@@ -22,15 +22,19 @@ public class User {
     private Long id;
 
     private String oneSignal;
+    private String userType;
     private String name;
     private String phoneNumber;
     private List<Long> notificationHistory;
     private Boolean isMutedNotifications;
     private String password;
     private Integer orderCount;
+    private List<String> identifyPhoto;
     private Boolean online;
+    private String activeDeviceId;
     private String expiryDate;
     private String createdDate;
+    private String isRequest;
     @JsonProperty("isDisable")
     private Boolean isDisable;
 }
