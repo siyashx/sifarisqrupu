@@ -49,7 +49,11 @@ public class NotificationImpl {
         if (optional.isPresent()) {
             Notification notification = optional.get();
 
-            // Update fields only if they are not null
+
+            if (notificationDto.getChatId() != null) {
+                notification.setChatId(notificationDto.getChatId());
+            }
+
             if (notificationDto.getUserId() != null) {
                 notification.setUserId(notificationDto.getUserId());
             }
