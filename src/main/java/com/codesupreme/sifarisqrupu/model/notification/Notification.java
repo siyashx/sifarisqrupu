@@ -19,7 +19,7 @@ public class Notification {
     private Long id;
 
     private String userId;
-    private String notificationType;
+    private String courierId;
     private String message;
     private String createdAt;
 }

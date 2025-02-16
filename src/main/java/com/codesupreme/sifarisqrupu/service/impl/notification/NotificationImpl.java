@@ -1,7 +1,9 @@
 package com.codesupreme.sifarisqrupu.service.impl.notification;
 
 import com.codesupreme.sifarisqrupu.dao.notification.NotificationRepository;
+import com.codesupreme.sifarisqrupu.dto.chat.ChatDto;
 import com.codesupreme.sifarisqrupu.dto.notification.NotificationDto;
+import com.codesupreme.sifarisqrupu.model.chat.Chat;
 import com.codesupreme.sifarisqrupu.model.notification.Notification;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,36 @@ public class NotificationImpl {
         Notification det = modelMapper.map(dto, Notification.class);
         det = notificationRepository.save(det);
         return modelMapper.map(det, NotificationDto.class);
+    }
+
+    //Update
+    public NotificationDto updateNotification(Long notificationId, NotificationDto notificationDto) {
+        Optional<Notification> optional = notificationRepository.findById(notificationId);
+        if (optional.isPresent()) {
+            Notification notification = optional.get();
+
+            // Update fields only if they are not null
+            if (notificationDto.getUserId() != null) {
+                notification.setUserId(notificationDto.getUserId());
+            }
+
+            if (notificationDto.getCourierId() != null) {
+                notification.setCourierId(notificationDto.getCourierId());
+            }
+
+            if (notificationDto.getMessage() != null) {
+                notificationDto.setMessage(notificationDto.getMessage());
+            }
+
+            if (notificationDto.getCreatedAt() != null) {
+                notificationDto.setCreatedAt(notificationDto.getCreatedAt());
+            }
+
+            notification = notificationRepository.save(notification);
+
+            return modelMapper.map(notification, NotificationDto.class);
+        }
+        return null;
     }
 
     //Delete
