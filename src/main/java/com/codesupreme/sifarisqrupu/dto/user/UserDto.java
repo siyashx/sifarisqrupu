@@ -24,6 +24,7 @@ public class UserDto {
     private String password;
     private Integer orderCount;
     private List<String> identifyPhoto;
+    private List<String> verified;
     private Boolean online;
     private String activeDeviceId;
     private String expiryDate;
