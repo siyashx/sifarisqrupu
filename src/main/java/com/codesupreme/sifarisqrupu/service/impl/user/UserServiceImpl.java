@@ -99,8 +99,8 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setIdentifyPhoto(userDto.getIdentifyPhoto());
             }
 
-            if (userDto.getVerified() != null) {
-                user.setVerified(userDto.getVerified());
+            if (userDto.getAffected() != null) {
+                user.setAffected(userDto.getAffected());
             }
 
             if (userDto.getOnline() != null) {

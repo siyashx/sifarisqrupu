@@ -30,7 +30,7 @@ public class User {
     private String password;
     private Integer orderCount;
     private List<String> identifyPhoto;
-    private List<String> verified;
+    private List<String> affected;
     private Boolean online;
     private String activeDeviceId;
     private String expiryDate;
