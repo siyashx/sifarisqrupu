@@ -103,6 +103,10 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setAffected(userDto.getAffected());
             }
 
+            if (userDto.getReviewedByAdmin() != null) {
+                user.setReviewedByAdmin(userDto.getReviewedByAdmin());
+            }
+
             if (userDto.getOnline() != null) {
                 user.setOnline(userDto.getOnline());
             }

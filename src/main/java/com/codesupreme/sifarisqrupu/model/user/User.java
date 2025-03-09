@@ -31,6 +31,7 @@ public class User {
     private Integer orderCount;
     private List<String> identifyPhoto;
     private List<String> affected;
+    private List<String> reviewedByAdmin;
     private Boolean online;
     private String activeDeviceId;
     private String expiryDate;
