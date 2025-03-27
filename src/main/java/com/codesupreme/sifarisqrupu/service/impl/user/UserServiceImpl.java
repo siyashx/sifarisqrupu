@@ -123,10 +123,6 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setCreatedDate(userDto.getCreatedDate());
             }
 
-            if (userDto.getIsRequest() != null) {
-                user.setIsRequest(userDto.getIsRequest());
-            }
-
             if (userDto.getIsDisable() != null) {
                 user.setIsDisable(userDto.getIsDisable());
             }
