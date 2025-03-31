@@ -73,6 +73,10 @@ public class ChatServiceImpl implements ChatServiceInter {
                 chat.setMessage(chatDto.getMessage());
             }
 
+            if (chatDto.getIsWebsite() != null) {
+                chat.setIsWebsite(chatDto.getIsWebsite());
+            }
+
             if (chatDto.getTimestamp() != null) {
                 chat.setTimestamp(chatDto.getTimestamp());
             }

@@ -19,6 +19,7 @@ public class ChatDto {
     private List<String> isSeenIds;
     private String userType;
     private String message;
+    private Boolean isWebsite;
     private String timestamp;
     private Boolean isCompleted;
 }
