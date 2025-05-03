@@ -29,6 +29,8 @@ public class User {
     private Boolean isMutedNotifications;
     private String password;
     private Integer orderCount;
+    private List<String> location;
+    private String locationUrl;
     private List<String> identifyPhoto;
     private String courierStatus;
     private String customerStatus;

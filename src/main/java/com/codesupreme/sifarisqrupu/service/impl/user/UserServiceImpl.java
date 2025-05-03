@@ -95,6 +95,15 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setOrderCount(userDto.getOrderCount());
             }
 
+            if (userDto.getLocation() != null) {
+                user.setLocation(userDto.getLocation());
+            }
+
+            if (userDto.getLocationUrl() != null) {
+                user.setLocationUrl(userDto.getLocationUrl());
+            }
+
+
             if (userDto.getIdentifyPhoto() != null) {
                 user.setIdentifyPhoto(userDto.getIdentifyPhoto());
             }
