@@ -1,21 +1,26 @@
 package com.codesupreme.sifarisqrupu.api.user.controller;
 
+import com.codesupreme.sifarisqrupu.dao.user.UserRepository;
 import com.codesupreme.sifarisqrupu.dto.user.UserDto;
+import com.codesupreme.sifarisqrupu.model.user.User;
 import com.codesupreme.sifarisqrupu.service.impl.user.UserServiceImpl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v5/user")
 public class UserController {
 
     private final UserServiceImpl userServiceImpl;
+    private final UserRepository userRepository;
 
-    public UserController(UserServiceImpl userServiceImpl) {
+    public UserController(UserRepository userRepository, UserServiceImpl userServiceImpl) {
         this.userServiceImpl = userServiceImpl;
+        this.userRepository = userRepository;
     }
 
     // List
@@ -47,6 +52,19 @@ public class UserController {
         }
         return ResponseEntity.notFound().build();
     }
+
+    @GetMapping("/by-location-url")
+    public ResponseEntity<User> getUserByLocationUrl(@RequestParam String url) {
+        User user = userRepository.findByLocationUrl(url);
+        if (user != null) {
+            return ResponseEntity.ok(user);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+
+
 
     // Delete
     @DeleteMapping("/{userId}")
