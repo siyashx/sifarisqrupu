@@ -27,9 +27,9 @@ public class UserDto {
     private String locationUrl;
     private List<String> identifyPhoto;
     private String courierStatus;
-    private String customerStatus;
     private Boolean online;
     private String activeDeviceId;
+    private Boolean isSub;
     private String expiryDate;
     private String createdDate;
     @JsonProperty("isDisable")
