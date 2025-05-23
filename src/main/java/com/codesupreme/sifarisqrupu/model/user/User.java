@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
+import java.util.Date;
 import java.util.List;
 
 @Table
@@ -36,7 +38,7 @@ public class User {
     private Boolean online;
     private String activeDeviceId;
     private Boolean isSub;
-    private String expiryDate;
+    private LocalDate expiryDate;
     private String createdDate;
     @JsonProperty("isDisable")
     private Boolean isDisable;
