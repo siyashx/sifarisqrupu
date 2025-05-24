@@ -38,7 +38,7 @@ public class User {
     private Boolean online;
     private String activeDeviceId;
     private Boolean isSub;
-    private LocalDate expiryDate;
+    private Date expiryDate;
     private String createdDate;
     @JsonProperty("isDisable")
     private Boolean isDisable;

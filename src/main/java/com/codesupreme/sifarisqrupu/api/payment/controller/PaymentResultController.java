@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Base64;
+import java.util.Date;
 import java.util.Map;
 import java.util.Optional;
 
@@ -73,17 +75,18 @@ public class PaymentResultController {
 
             Long userId = Long.parseLong(parts[2]);
 
-            // İstifadəçini tap
             Optional<User> optionalUser = userRepository.findById(userId);
             if (optionalUser.isPresent()) {
                 User user = optionalUser.get();
 
                 user.setIsSub(true); // abunəlik aktivləşdirilir
 
-                // Hal-hazırkı tarixə 1 ay əlavə edilir
+                // Hal-hazırkı tarixə 1 ay əlavə edilir və java.util.Date-ə çevrilir
                 LocalDate now = LocalDate.now();
                 LocalDate expiry = now.plusMonths(1);
-                user.setExpiryDate(expiry);
+                Date expiryDate = Date.from(expiry.atStartOfDay(ZoneId.systemDefault()).toInstant());
+
+                user.setExpiryDate(expiryDate);
 
                 userRepository.save(user);
 
@@ -91,6 +94,7 @@ public class PaymentResultController {
             } else {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found");
             }
+
 
         } catch (Exception e) {
             e.printStackTrace();
