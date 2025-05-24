@@ -1,6 +1,7 @@
 package com.codesupreme.sifarisqrupu.dto.user;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.persistence.Column;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -32,6 +33,7 @@ public class UserDto {
     private Boolean online;
     private String activeDeviceId;
     private Boolean isSub;
+    @Column(name = "expiry_date")
     private Date expiryDate;
     private String createdDate;
     @JsonProperty("isDisable")
