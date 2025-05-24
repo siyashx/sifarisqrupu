@@ -38,6 +38,7 @@ public class User {
     private Boolean online;
     private String activeDeviceId;
     private Boolean isSub;
+    @Column(name = "expiry_date")
     private Date expiryDate;
     private String createdDate;
     @JsonProperty("isDisable")
