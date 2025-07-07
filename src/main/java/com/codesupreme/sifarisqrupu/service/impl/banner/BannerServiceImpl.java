@@ -51,6 +51,10 @@ public class BannerServiceImpl {
                 banner.setDescription(bannerDto.getDescription());
             }
 
+            if (bannerDto.getAdTime() != null) {
+                banner.setAdTime(bannerDto.getAdTime());
+            }
+
             if (bannerDto.getLink() != null) {
                 banner.setLink(bannerDto.getLink());
             }

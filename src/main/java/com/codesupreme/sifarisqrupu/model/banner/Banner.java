@@ -20,6 +20,7 @@ public class Banner {
 
     private Long userId;
     private String description;
+    private Integer adTime;
     private String link;
     private String expiryDate;
     private Boolean isDisable;
