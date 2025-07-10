@@ -15,6 +15,7 @@ public class NotificationDto {
     private String chatId;
     private String userId;
     private String courierId;
+    private String type;
     private String message;
     private String createdAt;
 

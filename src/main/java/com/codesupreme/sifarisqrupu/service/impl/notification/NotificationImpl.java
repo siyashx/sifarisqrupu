@@ -62,6 +62,10 @@ public class NotificationImpl {
                 notification.setCourierId(notificationDto.getCourierId());
             }
 
+            if (notificationDto.getType() != null) {
+                notification.setType(notificationDto.getType());
+            }
+
             if (notificationDto.getMessage() != null) {
                 notificationDto.setMessage(notificationDto.getMessage());
             }
