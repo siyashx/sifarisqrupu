@@ -132,6 +132,10 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setCreatedDate(userDto.getCreatedDate());
             }
 
+            if (userDto.getDisableExpiryDate() != null) {
+                user.setDisableExpiryDate(userDto.getDisableExpiryDate());
+            }
+
             if (userDto.getIsDisable() != null) {
                 user.setIsDisable(userDto.getIsDisable());
             }

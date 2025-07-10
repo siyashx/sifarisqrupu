@@ -41,6 +41,7 @@ public class User {
     @Column(name = "expiry_date")
     private Date expiryDate;
     private String createdDate;
+    private String disableExpiryDate;
     @JsonProperty("isDisable")
     private Boolean isDisable;
 }
