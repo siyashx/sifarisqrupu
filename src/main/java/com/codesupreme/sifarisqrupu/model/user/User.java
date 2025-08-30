@@ -35,8 +35,9 @@ public class User {
     private String locationUrl;
     private List<String> identifyPhoto;
     private String courierStatus;
-    private Boolean online;
+    private List<Long> pinnedGroups;
     private String activeDeviceId;
+    private String phoneId;
     private Boolean isSub;
     @Column(name = "expiry_date")
     private Date expiryDate;

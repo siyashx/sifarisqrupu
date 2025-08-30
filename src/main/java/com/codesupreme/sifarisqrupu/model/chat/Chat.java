@@ -21,8 +21,15 @@ public class Chat {
     private Long id;
 
     private Long userId;
+    private String groupId;
     private String username;
     private List<String> isSeenIds;
+    private String messageType;
+    private String imageUrl;
+    private String audioUrl;
+    private Boolean isReply;
+    private Long replyUserId;
+    private String replyMessage;
     private String userType;
     private String message;
     private Boolean isWebsite;

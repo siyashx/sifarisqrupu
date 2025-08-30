@@ -30,7 +30,8 @@ public class UserDto {
     private String locationUrl;
     private List<String> identifyPhoto;
     private String courierStatus;
-    private Boolean online;
+    private List<Long> pinnedGroups;
+    private String phoneId;
     private String activeDeviceId;
     private Boolean isSub;
     @Column(name = "expiry_date")

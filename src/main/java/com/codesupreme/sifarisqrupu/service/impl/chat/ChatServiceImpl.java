@@ -52,6 +52,10 @@ public class ChatServiceImpl implements ChatServiceInter {
         if (chatOptional.isPresent()) {
             Chat chat = chatOptional.get();
 
+            if (chatDto.getGroupId() != null) {
+                chat.setGroupId(chatDto.getGroupId());
+            }
+
             // Update fields only if they are not null
             if (chatDto.getUserId() != null) {
                 chat.setUserId(chatDto.getUserId());
@@ -65,8 +69,32 @@ public class ChatServiceImpl implements ChatServiceInter {
                 chat.setIsSeenIds(chatDto.getIsSeenIds());
             }
 
+            if (chatDto.getMessageType() != null) {
+                chat.setMessageType(chatDto.getMessageType());
+            }
+
+            if (chatDto.getImageUrl() != null) {
+                chat.setImageUrl(chatDto.getImageUrl());
+            }
+
+            if (chatDto.getAudioUrl() != null) {
+                chat.setAudioUrl(chatDto.getAudioUrl());
+            }
+
             if (chatDto.getUserType() != null) {
                 chat.setUserType(chatDto.getUserType());
+            }
+
+            if (chatDto.getIsReply() != null) {
+                chat.setIsReply(chatDto.getIsReply());
+            }
+
+            if (chatDto.getReplyUserId() != null) {
+                chat.setReplyUserId(chatDto.getReplyUserId());
+            }
+
+            if (chatDto.getReplyMessage() != null) {
+                chat.setReplyMessage(chatDto.getReplyMessage());
             }
 
             if (chatDto.getMessage() != null) {

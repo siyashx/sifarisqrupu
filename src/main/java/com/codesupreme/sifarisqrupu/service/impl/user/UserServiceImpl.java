@@ -112,8 +112,12 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setCourierStatus(userDto.getCourierStatus());
             }
 
-            if (userDto.getOnline() != null) {
-                user.setOnline(userDto.getOnline());
+            if (userDto.getPhoneId() != null) {
+                user.setPhoneId(userDto.getPhoneId());
+            }
+
+            if (userDto.getPinnedGroups() != null) {
+                user.setPinnedGroups(userDto.getPinnedGroups());
             }
 
             if (userDto.getActiveDeviceId() != null) {
