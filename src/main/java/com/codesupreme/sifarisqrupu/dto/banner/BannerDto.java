@@ -15,6 +15,8 @@ public class BannerDto {
     private Long userId;
     private String description;
     private Integer adTime;
+    private String type;
+    private String imageUrl;
     private String link;
     private String expiryDate;
     private Boolean isDisable;
