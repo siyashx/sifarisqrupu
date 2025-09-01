@@ -75,6 +75,10 @@ public class ChatGroupServiceImpl {
                 chatGroup.setMutedUserIds(chatGroupDto.getMutedUserIds());
             }
 
+            if (chatGroupDto.getRequestUserIds() != null) {
+                chatGroup.setRequestUserIds(chatGroupDto.getRequestUserIds());
+            }
+
             if (chatGroupDto.getIsPrivate() != null) {
                 chatGroup.setIsPrivate(chatGroupDto.getIsPrivate());
             }
