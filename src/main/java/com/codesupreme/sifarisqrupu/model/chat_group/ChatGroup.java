@@ -27,6 +27,7 @@ public class ChatGroup {
     private String name;
     private String description;
     private List<Long> mutedUserIds;
+    private Boolean isPrivate;
     @JsonProperty("isDisable")
     private Boolean isDisable;
     private String createdAt;

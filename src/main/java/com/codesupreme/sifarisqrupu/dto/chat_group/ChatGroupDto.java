@@ -20,6 +20,7 @@ public class ChatGroupDto {
     private String name;
     private String description;
     private List<Long> mutedUserIds;
+    private Boolean isPrivate;
     private Boolean isDisable;
     private String createdAt;
 }
