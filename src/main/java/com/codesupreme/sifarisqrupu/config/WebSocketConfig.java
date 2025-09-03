@@ -27,8 +27,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")   // Spring 5.3+ üçün bunu istifadə et
-                .withSockJS();                   // ← MÜTLƏQ, əks halda SockJS 404 verər
+                .setAllowedOriginPatterns("*"); // withSockJS() YOXDUR
+
     }
 }
-
