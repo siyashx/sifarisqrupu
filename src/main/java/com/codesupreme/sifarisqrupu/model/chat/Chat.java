@@ -23,6 +23,7 @@ public class Chat {
     private Long userId;
     private String groupId;
     private String username;
+    private String phone;
     private List<String> isSeenIds;
     private String messageType;
     private String imageUrl;

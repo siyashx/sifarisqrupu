@@ -65,6 +65,10 @@ public class ChatServiceImpl implements ChatServiceInter {
                 chat.setUsername(chatDto.getUsername());
             }
 
+            if (chatDto.getPhone() != null) {
+                chat.setPhone(chatDto.getPhone());
+            }
+
             if (chatDto.getIsSeenIds() != null) {
                 chat.setIsSeenIds(chatDto.getIsSeenIds());
             }

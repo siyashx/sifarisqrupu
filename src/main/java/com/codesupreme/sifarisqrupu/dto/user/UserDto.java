@@ -34,6 +34,7 @@ public class UserDto {
     private String phoneId;
     private String activeDeviceId;
     private Boolean isSub;
+    private Integer appVersion;
     @Column(name = "expiry_date")
     private Date expiryDate;
     private String createdDate;

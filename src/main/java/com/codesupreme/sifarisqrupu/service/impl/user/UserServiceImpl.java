@@ -124,6 +124,10 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setActiveDeviceId(userDto.getActiveDeviceId());
             }
 
+            if (userDto.getAppVersion() != null) {
+                user.setAppVersion(userDto.getAppVersion());
+            }
+
             if (userDto.getIsSub() != null) {
                 user.setIsSub(userDto.getIsSub());
             }

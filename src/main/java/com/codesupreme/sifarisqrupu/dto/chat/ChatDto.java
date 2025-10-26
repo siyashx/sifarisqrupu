@@ -17,6 +17,7 @@ public class ChatDto {
     private String groupId;
     private Long userId;
     private String username;
+    private String phone;
     private List<String> isSeenIds;
     private String messageType;
     private String imageUrl;

@@ -39,6 +39,7 @@ public class User {
     private String activeDeviceId;
     private String phoneId;
     private Boolean isSub;
+    private Integer appVersion;
     @Column(name = "expiry_date")
     private Date expiryDate;
     private String createdDate;
