@@ -36,5 +36,17 @@ public class Chat {
     private Boolean isWebsite;
     private String timestamp;
     private Boolean isCompleted;
+
+    // 🔹 YENİ: statik location
+    @Column(name = "location_lat", columnDefinition = "DOUBLE")
+    private Double locationLat;
+
+    @Column(name = "location_lng", columnDefinition = "DOUBLE")
+    private Double locationLng;
+
+    // 🔹 YENİ: WhatsApp jpegThumbnail (base64); uzun ola bilər, LOB kimi saxla
+    @Lob
+    @Column(name = "thumbnail", columnDefinition = "LONGTEXT")
+    private String thumbnail;
 }
 

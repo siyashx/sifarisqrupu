@@ -117,6 +117,18 @@ public class ChatServiceImpl implements ChatServiceInter {
                 chat.setIsCompleted(chatDto.getIsCompleted());
             }
 
+            if (chatDto.getLocationLat() != null) {
+                chat.setLocationLat(chatDto.getLocationLat());
+            }
+
+            if (chatDto.getLocationLng() != null) {
+                chat.setLocationLng(chatDto.getLocationLng());
+            }
+
+            if (chatDto.getThumbnail() != null) {
+                chat.setThumbnail(chatDto.getThumbnail());
+            }
+
             chat = chatRepository.save(chat);
 
             return modelMapper.map(chat, ChatDto.class);

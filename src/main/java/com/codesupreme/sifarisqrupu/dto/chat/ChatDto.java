@@ -30,4 +30,11 @@ public class ChatDto {
     private Boolean isWebsite;
     private String timestamp;
     private Boolean isCompleted;
+
+    // 🔹 YENİ: statik location üçün
+    private Double locationLat;
+    private Double locationLng;
+
+    // 🔹 YENİ: WhatsApp-ın verdiyi base64 thumbnail (jpeg)
+    private String thumbnail;
 }
