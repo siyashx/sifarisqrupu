@@ -136,6 +136,10 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setExpiryDate(userDto.getExpiryDate());
             }
 
+            if (userDto.getIsVerifyPhone() != null) {
+                user.setIsVerifyPhone(userDto.getIsVerifyPhone());
+            }
+
             if (userDto.getCreatedDate() != null) {
                 user.setCreatedDate(userDto.getCreatedDate());
             }
