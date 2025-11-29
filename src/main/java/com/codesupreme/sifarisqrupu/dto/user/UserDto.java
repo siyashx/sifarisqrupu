@@ -43,4 +43,15 @@ public class UserDto {
     @JsonProperty("isDisable")
     private Boolean isDisable;
 
+    //mototaksi
+    private String motoImage;
+    private String motoName;
+    private String motoVolume;
+    private List<String> currentLocation;
+    private Boolean online;
+    private Boolean currentlyDelivering;
+
+    private String gender;
+    private Integer weight;
+
 }

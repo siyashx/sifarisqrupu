@@ -152,6 +152,39 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setIsDisable(userDto.getIsDisable());
             }
 
+
+            if (userDto.getMotoImage() != null) {
+                user.setMotoImage(userDto.getMotoImage());
+            }
+
+            if (userDto.getMotoName() != null) {
+                user.setMotoName(userDto.getMotoName());
+            }
+
+            if (userDto.getMotoVolume() != null) {
+                user.setMotoVolume(userDto.getMotoVolume());
+            }
+
+            if (userDto.getCurrentLocation() != null) {
+                user.setCurrentLocation(userDto.getCurrentLocation());
+            }
+
+            if (userDto.getOnline() != null) {
+                user.setOnline(userDto.getOnline());
+            }
+
+            if (userDto.getCurrentlyDelivering() != null) {
+                user.setCurrentlyDelivering(userDto.getCurrentlyDelivering());
+            }
+
+            if (userDto.getGender() != null) {
+                user.setGender(userDto.getGender());
+            }
+
+            if (userDto.getWeight() != null) {
+                user.setWeight(userDto.getWeight());
+            }
+
             user = userRepository.save(user);
             return modelMapper.map(user, UserDto.class);
 
