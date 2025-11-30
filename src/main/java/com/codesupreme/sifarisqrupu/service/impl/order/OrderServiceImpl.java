@@ -50,6 +50,8 @@ public class OrderServiceImpl {
 
             if (orderDto.getCourierId() != null) {
                 order.setCourierId(orderDto.getCourierId());
+            } else {
+                order.setCourierId(null); // 🔹 Explicit null təyin et
             }
 
             if (orderDto.getCustomerId() != null) {
