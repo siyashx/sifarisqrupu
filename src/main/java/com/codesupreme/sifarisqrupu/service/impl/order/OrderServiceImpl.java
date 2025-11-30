@@ -54,7 +54,6 @@ public class OrderServiceImpl {
                 } else {
                     order.setCourierId(orderDto.getCourierId());
                 }
-
             }
 
             if (orderDto.getCustomerId() != null) {
