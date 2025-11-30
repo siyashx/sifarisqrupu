@@ -49,9 +49,12 @@ public class OrderServiceImpl {
 
 
             if (orderDto.getCourierId() != null) {
-                order.setCourierId(orderDto.getCourierId());
-            } else {
-                order.setCourierId(null); // 🔹 Explicit null təyin et
+                if (orderDto.getCourierId() == 0) {
+                    order.setCourierId(null); // 🔹 Explicit null təyin et
+                } else {
+                    order.setCourierId(orderDto.getCourierId());
+                }
+
             }
 
             if (orderDto.getCustomerId() != null) {
