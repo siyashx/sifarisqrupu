@@ -44,6 +44,10 @@ public class UserDto {
     private Boolean isDisable;
 
     //mototaksi
+
+    private Boolean isSubMotoTaksi;
+    private String motoTaksiExpiryDate;
+
     private String motoImage;
     private String motoName;
     private String motoVolume;
@@ -53,5 +57,7 @@ public class UserDto {
 
     private String gender;
     private Integer weight;
+
+
 
 }

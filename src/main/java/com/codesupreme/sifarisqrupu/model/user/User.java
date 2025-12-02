@@ -49,6 +49,10 @@ public class User {
     private Boolean isDisable;
 
     //mototaksi
+
+    private Boolean isSubMotoTaksi;
+    private String motoTaksiExpiryDate;
+
     private String motoImage;
     private String motoName;
     private String motoVolume;

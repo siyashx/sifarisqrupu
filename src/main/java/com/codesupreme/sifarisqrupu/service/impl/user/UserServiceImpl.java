@@ -152,6 +152,14 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setIsDisable(userDto.getIsDisable());
             }
 
+            if (userDto.getIsSubMotoTaksi() != null) {
+                user.setIsSubMotoTaksi(userDto.getIsSubMotoTaksi());
+            }
+
+            if (userDto.getMotoTaksiExpiryDate() != null) {
+                user.setMotoTaksiExpiryDate(userDto.getMotoTaksiExpiryDate());
+            }
+
 
             if (userDto.getMotoImage() != null) {
                 user.setMotoImage(userDto.getMotoImage());
