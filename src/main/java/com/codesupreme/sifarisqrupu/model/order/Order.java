@@ -29,17 +29,21 @@ public class Order {
     @ElementCollection
     @CollectionTable(name = "order_from_address", joinColumns = @JoinColumn(name = "order_id"))
     @Column(name = "from_address")
+    @org.hibernate.annotations.BatchSize(size = 50)
     private List<String> fromAddress;
 
     @ElementCollection
     @CollectionTable(name = "order_to_address", joinColumns = @JoinColumn(name = "order_id"))
     @Column(name = "to_address")
+    @org.hibernate.annotations.BatchSize(size = 50)
     private List<String> toAddress;
 
     @ElementCollection
     @CollectionTable(name = "order_cancelled_couriers", joinColumns = @JoinColumn(name = "order_id"))
     @Column(name = "cancelled_courier_id")
+    @org.hibernate.annotations.BatchSize(size = 50)
     private List<Long> cancelledCourierIds;
+
 
     private String status;
     private Double price;
