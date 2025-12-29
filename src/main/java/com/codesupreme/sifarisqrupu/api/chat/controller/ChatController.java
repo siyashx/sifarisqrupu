@@ -12,6 +12,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Controller
@@ -39,12 +40,21 @@ public class ChatController {
 
     // CRUD Operations for Chat
     @GetMapping("/chats")
-    public ResponseEntity<List<ChatDto>> getAllChat() {
-        List<ChatDto> messages = chatServiceImpl.getAllChats();
-        if (messages != null) {
-            return ResponseEntity.ok(messages);
+    public ResponseEntity<List<ChatDto>> getAllChat(
+            @RequestParam(value = "groupIds", required = false) String groupIds,
+            @RequestParam(value = "limit", required = false, defaultValue = "50") int limit
+    ) {
+        List<String> gids = null;
+
+        if (groupIds != null && !groupIds.trim().isEmpty()) {
+            gids = Arrays.stream(groupIds.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
         }
-        return ResponseEntity.notFound().build();
+
+        List<ChatDto> messages = chatServiceImpl.getLatestChats(gids, limit);
+        return ResponseEntity.ok(messages);
     }
 
     @PostMapping("/chat")

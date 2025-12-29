@@ -8,6 +8,7 @@ public interface ChatServiceInter {
 
     ChatDto createChat(ChatDto chatDto);
     List<ChatDto> getAllChats();
+    List<ChatDto> getLatestChats(List<String> groupIds, int limit);
     Boolean removeById(Long chatId);
     ChatDto getChatById(Long chatId);
     ChatDto updateChat(Long chatId, ChatDto chatDto);

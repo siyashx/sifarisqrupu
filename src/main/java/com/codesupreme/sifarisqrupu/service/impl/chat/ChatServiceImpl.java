@@ -6,8 +6,12 @@ import com.codesupreme.sifarisqrupu.model.chat.Chat;
 import com.codesupreme.sifarisqrupu.service.inter.chat.ChatServiceInter;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -38,6 +42,27 @@ public class ChatServiceImpl implements ChatServiceInter {
         return chats.stream()
                 .map(chat -> modelMapper.map(chat, ChatDto.class))
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<ChatDto> getLatestChats(List<String> groupIds, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 200)); // max 200
+        Pageable pageable = PageRequest.of(0, safeLimit);
+
+        List<Chat> chats;
+        if (groupIds == null || groupIds.isEmpty()) {
+            chats = chatRepository.findAllByOrderByIdDesc(pageable);
+        } else {
+            chats = chatRepository.findByGroupIdInOrderByIdDesc(groupIds, pageable);
+        }
+
+        // DESC gəlir, UI üçün ASC-ə çevirək (köhnədən yeniyə)
+        List<Chat> asc = new ArrayList<>(chats);
+        java.util.Collections.reverse(asc);
+
+        return asc.stream()
+                .map(chat -> modelMapper.map(chat, ChatDto.class))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     @Override
