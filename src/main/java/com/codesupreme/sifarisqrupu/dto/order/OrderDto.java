@@ -19,6 +19,7 @@ public class OrderDto {
 
     private Long customerId;
     private Long courierId;
+    private String orderType;
     private List<String> fromAddress;
     private List<String> toAddress;
     private List<Long> cancelledCourierIds;

@@ -60,6 +60,10 @@ public class OrderServiceImpl {
                 order.setCustomerId(orderDto.getCustomerId());
             }
 
+            if (orderDto.getOrderType() != null) {
+                order.setOrderType(orderDto.getOrderType());
+            }
+
             if (orderDto.getFromAddress() != null) {
                 order.setFromAddress(orderDto.getFromAddress());
             }

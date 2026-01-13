@@ -26,11 +26,14 @@ public class Order {
     private Long customerId;
     private Long courierId;
 
+    private String orderType;
+
     @ElementCollection
     @CollectionTable(name = "order_from_address", joinColumns = @JoinColumn(name = "order_id"))
     @Column(name = "from_address")
     @org.hibernate.annotations.BatchSize(size = 50)
     private List<String> fromAddress;
+
 
     @ElementCollection
     @CollectionTable(name = "order_to_address", joinColumns = @JoinColumn(name = "order_id"))
