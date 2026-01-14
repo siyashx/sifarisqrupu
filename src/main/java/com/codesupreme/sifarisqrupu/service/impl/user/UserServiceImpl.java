@@ -185,6 +185,10 @@ public class UserServiceImpl implements UserServiceInter {
                 user.setCurrentlyDelivering(userDto.getCurrentlyDelivering());
             }
 
+            if (userDto.getHasActiveApp() != null) {
+                user.setHasActiveApp(userDto.getHasActiveApp());
+            }
+
             if (userDto.getGender() != null) {
                 user.setGender(userDto.getGender());
             }

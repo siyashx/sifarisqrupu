@@ -38,6 +38,7 @@ public class UserDto {
     @Column(name = "expiry_date")
     private Date expiryDate;
     private Boolean isVerifyPhone;
+    private String hasActiveApp;
     private String createdDate;
     private String disableExpiryDate;
     @JsonProperty("isDisable")
