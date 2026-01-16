@@ -14,5 +14,6 @@ public class SuperAdminDto {
     private Long id;
     private Boolean technicalShutdown;
     private Integer latestVersion;
+    private Integer latestVersionMotoTaxi;
 }
 

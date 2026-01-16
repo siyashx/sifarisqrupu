@@ -57,6 +57,9 @@ public class SuperAdminServiceImpl {
                 superAdmin.setLatestVersion(superAdminDto.getLatestVersion());
             }
 
+            if (superAdminDto.getLatestVersionMotoTaxi() != null) {
+                superAdmin.setLatestVersionMotoTaxi(superAdminDto.getLatestVersionMotoTaxi());
+            }
 
             superAdmin = superAdminRepository.save(superAdmin);
             return modelMapper.map(superAdmin, SuperAdminDto.class);
