@@ -38,11 +38,10 @@ public class ChatController {
         return chatServiceImpl.createChat(chatMessageDto);
     }
 
-    // CRUD Operations for Chat
     @GetMapping("/chats")
     public ResponseEntity<List<ChatDto>> getAllChat(
             @RequestParam(value = "groupIds", required = false) String groupIds,
-            @RequestParam(value = "limit", required = false) int limit
+            @RequestParam(value = "limit", required = false) Integer limit
     ) {
         List<String> gids = null;
 
@@ -53,7 +52,15 @@ public class ChatController {
                     .toList();
         }
 
-        List<ChatDto> messages = chatServiceImpl.getLatestChats(gids, limit);
+        List<ChatDto> messages;
+
+        if (limit == null) {
+            // limit göndərilməyibsə hamısını gətir
+            messages = chatServiceImpl.getAllChats();
+        } else {
+            messages = chatServiceImpl.getLatestChats(gids, limit);
+        }
+
         return ResponseEntity.ok(messages);
     }
 
