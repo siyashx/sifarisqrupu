@@ -42,7 +42,7 @@ public class ChatController {
     @GetMapping("/chats")
     public ResponseEntity<List<ChatDto>> getAllChat(
             @RequestParam(value = "groupIds", required = false) String groupIds,
-            @RequestParam(value = "limit", required = false, defaultValue = "50") int limit
+            @RequestParam(value = "limit", required = false) int limit
     ) {
         List<String> gids = null;
 

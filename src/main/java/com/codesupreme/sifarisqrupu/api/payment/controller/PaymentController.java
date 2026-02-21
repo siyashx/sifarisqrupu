@@ -19,8 +19,8 @@ import java.util.Map;
 @RequestMapping("/api/v5")
 public class PaymentController {
 
-    private static final String PRIVATE_KEY = "VSJnqi0QMovynR5x1cSjO44H";
-    private static final String PUBLIC_KEY = "i000200797";
+    private static final String PRIVATE_KEY = "nG2pvn5mGb6JuDE9hBifYLcF";
+    private static final String PUBLIC_KEY = "i000201282";
 
     @PostMapping("/payment-init")
     public ResponseEntity<?> createPayment(@RequestBody PaymentRequest request) {
