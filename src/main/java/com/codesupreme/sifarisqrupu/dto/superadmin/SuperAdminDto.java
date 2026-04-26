@@ -16,5 +16,6 @@ public class SuperAdminDto {
     private Integer latestVersion;
     private Integer latestVersionMotoTaxi;
     private Integer todayChatCount;
+    private String lastChatCountDate; // "YYYY-MM-DD"
 }
 

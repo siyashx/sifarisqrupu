@@ -65,6 +65,10 @@ public class SuperAdminServiceImpl {
                 superAdmin.setTodayChatCount(superAdminDto.getTodayChatCount());
             }
 
+            if (superAdminDto.getLastChatCountDate() != null) {
+                superAdmin.setLastChatCountDate(superAdminDto.getLastChatCountDate());
+            }
+
             superAdmin = superAdminRepository.save(superAdmin);
             return modelMapper.map(superAdmin, SuperAdminDto.class);
         }
