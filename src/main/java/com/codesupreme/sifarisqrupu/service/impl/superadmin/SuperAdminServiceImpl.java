@@ -61,6 +61,10 @@ public class SuperAdminServiceImpl {
                 superAdmin.setLatestVersionMotoTaxi(superAdminDto.getLatestVersionMotoTaxi());
             }
 
+            if (superAdminDto.getTodayChatCount() != null) {
+                superAdmin.setTodayChatCount(superAdminDto.getTodayChatCount());
+            }
+
             superAdmin = superAdminRepository.save(superAdmin);
             return modelMapper.map(superAdmin, SuperAdminDto.class);
         }

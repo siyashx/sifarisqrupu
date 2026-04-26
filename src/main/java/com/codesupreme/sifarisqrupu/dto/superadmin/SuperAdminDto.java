@@ -15,5 +15,6 @@ public class SuperAdminDto {
     private Boolean technicalShutdown;
     private Integer latestVersion;
     private Integer latestVersionMotoTaxi;
+    private Integer todayChatCount;
 }
 
