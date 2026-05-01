@@ -17,11 +17,10 @@ public class BeanConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOrigins("https://mototaksi.az")
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                        .allowedHeaders("*")
-                        .exposedHeaders("*")
-                        .allowCredentials(true);
+        .allowedOriginPatterns("*")
+        .allowedMethods("*")
+        .allowedHeaders("*")
+        .allowCredentials(true);
             }
         };
     }
