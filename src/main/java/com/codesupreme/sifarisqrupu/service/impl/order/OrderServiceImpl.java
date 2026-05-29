@@ -9,6 +9,10 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Date;
+
 @Service
 public class OrderServiceImpl {
 
@@ -37,8 +41,20 @@ public class OrderServiceImpl {
     //Create
     public OrderDto createOrder(OrderDto dto) {
         Order det = modelMapper.map(dto, Order.class);
+
+        if (det.getIsDisable() == null) {
+            det.setIsDisable(false);
+        }
+
         det = orderRepository.save(det);
         return modelMapper.map(det, OrderDto.class);
+    }
+
+    @Transactional
+    public void disableNoCourierOrdersAfterTenMinutes() {
+        Date tenMinutesAgo = new Date(System.currentTimeMillis() - 10 * 60 * 1000);
+
+        orderRepository.disableExpiredNoCourierOrders("no_courier", tenMinutesAgo);
     }
 
     //Update
