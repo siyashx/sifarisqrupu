@@ -40,6 +40,8 @@ public class UserDto {
     private Boolean isVerifyPhone;
     private String hasActiveApp;
     private String createdDate;
+    private String disableWriteExpiryDate;
+    private Boolean isWriteDisable;
     private String disableExpiryDate;
     @JsonProperty("isDisable")
     private Boolean isDisable;
