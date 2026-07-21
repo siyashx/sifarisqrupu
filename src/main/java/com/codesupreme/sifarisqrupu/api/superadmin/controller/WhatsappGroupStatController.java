@@ -7,7 +7,7 @@ import com.codesupreme.sifarisqrupu.dto.superadmin.GroupStatIncrementRequest;
 import com.codesupreme.sifarisqrupu.dto.superadmin.UserMessageStatResponse;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappGroupDailyStat;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappGroupUserDailyStat;
-import com.codesupreme.sifarisqrupu.service.superadmin.WhatsappGroupStatService;
+import com.codesupreme.sifarisqrupu.service.impl.superadmin.WhatsappGroupStatService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
