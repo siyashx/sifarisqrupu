@@ -6,6 +6,8 @@ import com.codesupreme.sifarisqrupu.model.order.Order;
 import com.codesupreme.sifarisqrupu.service.impl.mototaxi.MotoTaxiPricingService;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,7 +15,6 @@ import java.util.Objects;
 
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
 
 @Service
 public class OrderServiceImpl {
@@ -51,9 +52,15 @@ public class OrderServiceImpl {
     public OrderDto createOrder(OrderDto dto) {
         Order det = modelMapper.map(dto, Order.class);
 
-        if (det.getIsDisable() == null) {
-            det.setIsDisable(false);
-        }
+        // New customer orders always enter the dispatch queue. Client-supplied
+        // courier/offer state is ignored so the sequential dispatcher remains
+        // the single source of truth.
+        det.setCourierId(null);
+        det.setStatus("no_courier");
+        det.setOfferedCourierId(null);
+        det.setOfferExpiresAt(null);
+        det.setSearchExpiresAt(null);
+        det.setIsDisable(false);
 
         // Price is always calculated by backend. Any price sent by the client is ignored.
         det.setPrice(pricingService.calculateOrderPrice(
@@ -66,12 +73,6 @@ public class OrderServiceImpl {
         return modelMapper.map(det, OrderDto.class);
     }
 
-    @Transactional
-    public void disableNoCourierOrdersAfterTenMinutes() {
-        Date tenMinutesAgo = new Date(System.currentTimeMillis() - 10 * 60 * 1000);
-
-        orderRepository.disableExpiredNoCourierOrders("no_courier", tenMinutesAgo);
-    }
 
     //Update
     @Transactional
@@ -80,6 +81,19 @@ public class OrderServiceImpl {
         if (optional.isPresent()) {
             Order order = optional.get();
             boolean pricingInputsChanged = false;
+
+            // Dispatch-sensitive no_courier mutations must go through the
+            // atomic accept/decline endpoints. OrderController routes legacy
+            // valid payloads there before this method is reached.
+            if ("no_courier".equals(order.getStatus())
+                    && (orderDto.getCancelledCourierIds() != null
+                    || orderDto.getCourierId() != null
+                    || "to_customer".equals(orderDto.getStatus()))) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Bu dəyişiklik MotoTaksi dispatch endpoint-i ilə edilməlidir"
+                );
+            }
 
             if (orderDto.getCourierId() != null) {
                 if (orderDto.getCourierId() == 0) {

@@ -26,6 +26,9 @@ public class OrderDto {
     private String status;
     private Double price;
     private Double distance;
+    private Long offeredCourierId;
+    private Date offerExpiresAt;
+    private Date searchExpiresAt;
     @JsonProperty("isDisable")
     private Boolean isDisable;
     private Date createdAt;

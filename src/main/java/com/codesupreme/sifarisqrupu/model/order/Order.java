@@ -52,6 +52,12 @@ public class Order {
     private Double price;
     private Double distance;
 
+    // Sequential MotoTaksi dispatch state. courierId is written only after
+    // the offered courier actually accepts the order.
+    private Long offeredCourierId;
+    private Date offerExpiresAt;
+    private Date searchExpiresAt;
+
     @JsonProperty("isDisable")
     private Boolean isDisable;
 
