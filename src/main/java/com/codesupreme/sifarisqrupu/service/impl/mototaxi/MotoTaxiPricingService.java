@@ -191,19 +191,19 @@ public class MotoTaxiPricingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pricing body is required");
         }
 
-        validatePositiveMoney(dto.getManMinimumPrice(), "manMinimumPrice");
-        validatePositiveMoney(dto.getManPricePerKm(), "manPricePerKm");
-        validatePositiveMoney(dto.getWomanMinimumPrice(), "womanMinimumPrice");
-        validatePositiveMoney(dto.getWomanPricePerKm(), "womanPricePerKm");
-        validatePositiveMoney(dto.getDeliveryMinimumPrice(), "deliveryMinimumPrice");
-        validatePositiveMoney(dto.getDeliveryPricePerKm(), "deliveryPricePerKm");
+        validateNonNegativeMoney(dto.getManMinimumPrice(), "manMinimumPrice");
+        validateNonNegativeMoney(dto.getManPricePerKm(), "manPricePerKm");
+        validateNonNegativeMoney(dto.getWomanMinimumPrice(), "womanMinimumPrice");
+        validateNonNegativeMoney(dto.getWomanPricePerKm(), "womanPricePerKm");
+        validateNonNegativeMoney(dto.getDeliveryMinimumPrice(), "deliveryMinimumPrice");
+        validateNonNegativeMoney(dto.getDeliveryPricePerKm(), "deliveryPricePerKm");
     }
 
-    private void validatePositiveMoney(BigDecimal value, String fieldName) {
-        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+    private void validateNonNegativeMoney(BigDecimal value, String fieldName) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) < 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    fieldName + " must be greater than 0"
+                    fieldName + " must be 0 or greater"
             );
         }
 
