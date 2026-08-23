@@ -10,6 +10,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 @Table(name = "`order`")
 @Entity
@@ -56,6 +57,18 @@ public class Order {
     // the offered courier actually accepts the order.
     private Long offeredCourierId;
     private Date offerExpiresAt;
+
+    // Multi-courier fan-out dispatch. A courier keeps its own offer for the
+    // full offer window while the next nearest courier can be invited after
+    // the fan-out interval. The legacy fields above are retained for old apps.
+    @ElementCollection
+    @CollectionTable(name = "order_active_offers", joinColumns = @JoinColumn(name = "order_id"))
+    @MapKeyColumn(name = "courier_id")
+    @Column(name = "expires_at")
+    @org.hibernate.annotations.BatchSize(size = 50)
+    private Map<Long, Date> activeOfferExpirations;
+
+    private Date lastOfferAt;
     private Date searchExpiresAt;
 
     @JsonProperty("isDisable")

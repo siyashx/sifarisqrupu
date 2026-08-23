@@ -1,5 +1,7 @@
 package com.codesupreme.sifarisqrupu.service.impl.mototaxi;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,21 +22,24 @@ public class MotoTaxiCourierPushService {
     private static final String EXTERNAL_ID_PREFIX = "elehber_user_";
 
     private final RestClient restClient;
+    private final ObjectMapper objectMapper;
     private final String appId;
     private final String restApiKey;
     private final String androidChannelId;
     private final int offerTtlSeconds;
 
     public MotoTaxiCourierPushService(
+            ObjectMapper objectMapper,
             @Value("${mototaxi.onesignal.app-id:}") String appId,
             @Value("${mototaxi.onesignal.rest-api-key:}") String restApiKey,
             @Value("${mototaxi.onesignal.android-channel-id:c668a935-ea3e-450d-afa4-5853169c36cf}") String androidChannelId,
-            @Value("${mototaxi.dispatch.offer-timeout-seconds:5}") long offerTimeoutSeconds
+            @Value("${mototaxi.dispatch.offer-timeout-seconds:60}") long offerTimeoutSeconds
     ) {
         this.restClient = RestClient.builder().baseUrl("https://api.onesignal.com").build();
-        this.appId = appId == null ? "" : appId.trim();
-        this.restApiKey = restApiKey == null ? "" : restApiKey.trim();
-        this.androidChannelId = androidChannelId == null ? "" : androidChannelId.trim();
+        this.objectMapper = objectMapper;
+        this.appId = clean(appId);
+        this.restApiKey = clean(restApiKey);
+        this.androidChannelId = clean(androidChannelId);
         this.offerTtlSeconds = (int) Math.max(1, Math.min(Integer.MAX_VALUE, offerTimeoutSeconds));
     }
 
@@ -55,7 +61,9 @@ public class MotoTaxiCourierPushService {
                 ? "Yeni çatdırılma sifarişi var. Paketi götürməyə tələsin!"
                 : "Yeni Moto Taksi sifarişi var. Müştərini götürməyə tələsin!";
 
-        Map<String, Object> payload = baseTarget(courierId, pushSubscriptionId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("app_id", appId);
+        payload.put("target_channel", "push");
         payload.put("headings", Map.of("en", title));
         payload.put("contents", Map.of("en", body));
         payload.put("priority", 10);
@@ -70,10 +78,10 @@ public class MotoTaxiCourierPushService {
                 "orderId", orderId.toString(),
                 "orderType", orderType == null ? "ride" : orderType,
                 "alertKind", "courier_new_order",
-                "alertId", orderId + "_" + System.currentTimeMillis()
+                "alertId", orderId + "_" + courierId + "_" + System.currentTimeMillis()
         ));
 
-        post(payload);
+        postToCourier(courierId, pushSubscriptionId, payload, "new_order");
     }
 
     public void sendOrderStop(
@@ -88,7 +96,9 @@ public class MotoTaxiCourierPushService {
             return;
         }
 
-        Map<String, Object> payload = baseTarget(courierId, pushSubscriptionId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("app_id", appId);
+        payload.put("target_channel", "push");
         payload.put("priority", 10);
         payload.put("ttl", 60);
         payload.put("content_available", true);
@@ -108,35 +118,62 @@ public class MotoTaxiCourierPushService {
             }
         }
 
-        post(payload);
+        postToCourier(courierId, pushSubscriptionId, payload, event);
     }
 
-    private Map<String, Object> baseTarget(Long courierId, String pushSubscriptionId) {
-        var payload = new java.util.LinkedHashMap<String, Object>();
-        payload.put("app_id", appId);
-        payload.put("target_channel", "push");
+    /**
+     * The backend already stores the current OneSignal subscription id synced by
+     * Flutter. Use that exact device subscription first. If OneSignal reports no
+     * matching subscription (empty message id) or rejects the id, fall back to the
+     * stable external_id bound by OneSignal.login(). This covers both token rotation
+     * and temporary alias-sync problems without sending two successful pushes.
+     */
+    private void postToCourier(
+            Long courierId,
+            String pushSubscriptionId,
+            Map<String, Object> basePayload,
+            String event
+    ) {
+        String subscriptionId = clean(pushSubscriptionId);
 
-        // External ID is the stable identity. Flutter binds the active OneSignal
-        // subscription to elehber_user_<id> on login/start/resume. Targeting the
-        // alias avoids missing a push because the backend cached an old device
-        // subscription ID after token/subscription rotation.
-        payload.put(
+        if (!subscriptionId.isBlank()) {
+            Map<String, Object> subscriptionPayload = new LinkedHashMap<>(basePayload);
+            subscriptionPayload.put("include_subscription_ids", List.of(subscriptionId));
+
+            if (post(subscriptionPayload, courierId, event, "subscription_id")) {
+                return;
+            }
+
+            log.warn(
+                    "MotoTaksi OneSignal subscription target did not create a message; falling back to external_id. courierId={}, event={}",
+                    courierId,
+                    event
+            );
+        }
+
+        Map<String, Object> aliasPayload = new LinkedHashMap<>(basePayload);
+        aliasPayload.put(
                 "include_aliases",
                 Map.of("external_id", List.of(EXTERNAL_ID_PREFIX + courierId))
         );
 
-        return payload;
+        post(aliasPayload, courierId, event, "external_id");
     }
 
-    private void post(Map<String, Object> payload) {
+    private boolean post(
+            Map<String, Object> payload,
+            Long courierId,
+            String event,
+            String targetKind
+    ) {
         if (appId.isBlank() || restApiKey.isBlank()) {
             log.warn("MotoTaksi OneSignal push skipped: backend app-id/rest-api-key is not configured");
-            return;
+            return false;
         }
 
         try {
             ResponseEntity<String> response = restClient.post()
-                    .uri("/notifications?c=push")
+                    .uri("/notifications")
                     .contentType(MediaType.APPLICATION_JSON)
                     .header("Authorization", "Key " + restApiKey)
                     .body(payload)
@@ -144,21 +181,74 @@ public class MotoTaxiCourierPushService {
                     .toEntity(String.class);
 
             String responseBody = response.getBody();
-            if (responseBody != null && responseBody.contains("\"errors\"")) {
-                log.warn("MotoTaksi OneSignal response contains errors: {}", responseBody);
-            } else {
-                log.debug("MotoTaksi OneSignal push accepted: status={}", response.getStatusCode());
+            if (responseBody == null || responseBody.isBlank()) {
+                log.warn(
+                        "MotoTaksi OneSignal returned empty body. courierId={}, event={}, target={}",
+                        courierId,
+                        event,
+                        targetKind
+                );
+                return false;
             }
+
+            JsonNode root = objectMapper.readTree(responseBody);
+            String messageId = root.path("id").asText("").trim();
+
+            if (messageId.isEmpty()) {
+                log.warn(
+                        "MotoTaksi OneSignal created no message. courierId={}, event={}, target={}, response={}",
+                        courierId,
+                        event,
+                        targetKind,
+                        responseBody
+                );
+                return false;
+            }
+
+            if (root.has("errors")) {
+                log.warn(
+                        "MotoTaksi OneSignal response contains target errors. courierId={}, event={}, target={}, response={}",
+                        courierId,
+                        event,
+                        targetKind,
+                        responseBody
+                );
+            } else {
+                log.info(
+                        "MotoTaksi OneSignal push accepted. courierId={}, event={}, target={}, messageId={}",
+                        courierId,
+                        event,
+                        targetKind,
+                        messageId
+                );
+            }
+
+            return true;
         } catch (RestClientResponseException error) {
             log.error(
-                    "MotoTaksi courier push failed: status={}, body={}",
+                    "MotoTaksi courier push failed. courierId={}, event={}, target={}, status={}, body={}",
+                    courierId,
+                    event,
+                    targetKind,
                     error.getStatusCode(),
                     error.getResponseBodyAsString()
             );
+            return false;
         } catch (Exception error) {
             // Dispatch state is already committed. Push failure must never roll it back;
-            // foreground couriers still discover the offer through polling.
-            log.error("MotoTaksi courier push failed: {}", error.getMessage());
+            // foreground couriers still discover their active offer through polling.
+            log.error(
+                    "MotoTaksi courier push failed. courierId={}, event={}, target={}, error={}",
+                    courierId,
+                    event,
+                    targetKind,
+                    error.getMessage()
+            );
+            return false;
         }
+    }
+
+    private static String clean(String value) {
+        return value == null ? "" : value.trim();
     }
 }

@@ -59,6 +59,8 @@ public class OrderServiceImpl {
         det.setStatus("no_courier");
         det.setOfferedCourierId(null);
         det.setOfferExpiresAt(null);
+        det.setActiveOfferExpirations(new java.util.LinkedHashMap<>());
+        det.setLastOfferAt(null);
         det.setSearchExpiresAt(null);
         det.setIsDisable(false);
 

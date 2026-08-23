@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 @NoArgsConstructor
 @AllArgsConstructor
@@ -28,6 +29,8 @@ public class OrderDto {
     private Double distance;
     private Long offeredCourierId;
     private Date offerExpiresAt;
+    private Map<Long, Date> activeOfferExpirations;
+    private Date lastOfferAt;
     private Date searchExpiresAt;
     @JsonProperty("isDisable")
     private Boolean isDisable;

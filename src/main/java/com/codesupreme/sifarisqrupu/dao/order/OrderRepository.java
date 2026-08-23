@@ -36,16 +36,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     """)
     List<Long> findActiveCourierIds(@Param("statuses") Collection<String> statuses);
 
-    @Query("""
-        SELECT DISTINCT o.offeredCourierId
-        FROM Order o
-        WHERE o.isDisable = false
-          AND o.status = :status
-          AND o.offeredCourierId IS NOT NULL
-          AND o.offerExpiresAt > :now
-    """)
-    List<Long> findCurrentlyOfferedCourierIds(
-            @Param("status") String status,
-            @Param("now") Date now
-    );
+    @Query(value = """
+        SELECT DISTINCT courier_id
+        FROM order_active_offers
+        WHERE expires_at > :now
+    """, nativeQuery = true)
+    List<Long> findCurrentlyOfferedCourierIds(@Param("now") Date now);
 }
