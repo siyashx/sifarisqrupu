@@ -47,7 +47,7 @@ public class MotoTaxiOrderDispatchService {
             MotoTaxiCourierPushService pushService,
             PlatformTransactionManager transactionManager,
             @Value("${mototaxi.dispatch.search-timeout-seconds:300}") long searchTimeoutSeconds,
-            @Value("${mototaxi.dispatch.offer-timeout-seconds:60}") long offerTimeoutSeconds
+            @Value("${mototaxi.dispatch.offer-timeout-seconds:5}") long offerTimeoutSeconds
     ) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
