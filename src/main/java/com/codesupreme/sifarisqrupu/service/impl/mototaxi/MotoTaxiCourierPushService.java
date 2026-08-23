@@ -54,7 +54,9 @@ public class MotoTaxiCourierPushService {
         payload.put("headings", Map.of("en", title));
         payload.put("contents", Map.of("en", body));
         payload.put("priority", 10);
+        payload.put("ttl", 30);
         payload.put("android_channel_id", androidChannelId);
+        payload.put("android_sound", "default");
         payload.put("data", Map.of(
                 "scope", "mototaxi",
                 "event", "new_order",
