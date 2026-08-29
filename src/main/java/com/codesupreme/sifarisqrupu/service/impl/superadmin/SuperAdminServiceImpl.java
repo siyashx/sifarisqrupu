@@ -49,10 +49,6 @@ public class SuperAdminServiceImpl {
         if (superAdminOptional.isPresent()) {
             SuperAdmin superAdmin = superAdminOptional.get();
 
-            if (superAdminDto.getTechnicalShutdown() != null) {
-                superAdmin.setTechnicalShutdown(superAdminDto.getTechnicalShutdown());
-            }
-
             if (superAdminDto.getLatestVersion() != null) {
                 superAdmin.setLatestVersion(superAdminDto.getLatestVersion());
             }
@@ -61,12 +57,8 @@ public class SuperAdminServiceImpl {
                 superAdmin.setLatestVersionMotoTaxi(superAdminDto.getLatestVersionMotoTaxi());
             }
 
-            if (superAdminDto.getTodayChatCount() != null) {
-                superAdmin.setTodayChatCount(superAdminDto.getTodayChatCount());
-            }
-
-            if (superAdminDto.getLastChatCountDate() != null) {
-                superAdmin.setLastChatCountDate(superAdminDto.getLastChatCountDate());
+            if (superAdminDto.getLatestVersionZakazQrupu() != null) {
+                superAdmin.setLatestVersionZakazQrupu(superAdminDto.getLatestVersionZakazQrupu());
             }
 
             superAdmin = superAdminRepository.save(superAdmin);
