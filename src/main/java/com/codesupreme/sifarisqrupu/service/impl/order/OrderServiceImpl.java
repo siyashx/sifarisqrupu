@@ -53,7 +53,7 @@ public class OrderServiceImpl {
         Order det = modelMapper.map(dto, Order.class);
 
         // New customer orders always enter the dispatch queue. Client-supplied
-        // courier/offer state is ignored so the sequential dispatcher remains
+        // courier/offer state is ignored so the radius broadcaster remains
         // the single source of truth.
         det.setCourierId(null);
         det.setStatus("no_courier");

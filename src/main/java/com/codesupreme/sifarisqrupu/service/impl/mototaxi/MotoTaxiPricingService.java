@@ -21,6 +21,7 @@ public class MotoTaxiPricingService {
     private static final long PRICING_ID = 1L;
     private static final BigDecimal DEFAULT_MINIMUM_PRICE = new BigDecimal("2.00");
     private static final BigDecimal DEFAULT_PRICE_PER_KM = new BigDecimal("0.60");
+    private static final BigDecimal DEFAULT_DISPATCH_RADIUS_KM = new BigDecimal("50.00");
 
     private final MotoTaxiPricingRepository pricingRepository;
     private final UserRepository userRepository;
@@ -49,6 +50,14 @@ public class MotoTaxiPricingService {
         pricing.setWomanPricePerKm(money(dto.getWomanPricePerKm()));
         pricing.setDeliveryMinimumPrice(money(dto.getDeliveryMinimumPrice()));
         pricing.setDeliveryPricePerKm(money(dto.getDeliveryPricePerKm()));
+
+        // Backward compatibility: the existing admin app may still PUT only
+        // the six pricing fields. If dispatchRadiusKm is omitted, keep the
+        // current DB value instead of rejecting the request or resetting it.
+        if (dto.getDispatchRadiusKm() != null) {
+            validateDispatchRadius(dto.getDispatchRadiusKm());
+            pricing.setDispatchRadiusKm(kilometers(dto.getDispatchRadiusKm()));
+        }
 
         return toDto(pricingRepository.save(pricing));
     }
@@ -115,9 +124,24 @@ public class MotoTaxiPricingService {
         return quote(customerId, orderType, distance).getPrice().doubleValue();
     }
 
+    @Transactional
+    public double getDispatchRadiusKm() {
+        return getOrCreatePricing().getDispatchRadiusKm().doubleValue();
+    }
+
     private MotoTaxiPricing getOrCreatePricing() {
-        return pricingRepository.findById(PRICING_ID)
+        MotoTaxiPricing pricing = pricingRepository.findById(PRICING_ID)
                 .orElseGet(() -> pricingRepository.save(defaultPricing()));
+
+        // Existing production databases predate this column. Hibernate can add
+        // it with a NULL value, so self-heal the singleton settings row once.
+        if (pricing.getDispatchRadiusKm() == null
+                || pricing.getDispatchRadiusKm().compareTo(BigDecimal.ZERO) <= 0) {
+            pricing.setDispatchRadiusKm(DEFAULT_DISPATCH_RADIUS_KM);
+            pricing = pricingRepository.save(pricing);
+        }
+
+        return pricing;
     }
 
     private MotoTaxiPricing defaultPricing() {
@@ -129,6 +153,7 @@ public class MotoTaxiPricingService {
                 .womanPricePerKm(DEFAULT_PRICE_PER_KM)
                 .deliveryMinimumPrice(DEFAULT_MINIMUM_PRICE)
                 .deliveryPricePerKm(DEFAULT_PRICE_PER_KM)
+                .dispatchRadiusKm(DEFAULT_DISPATCH_RADIUS_KM)
                 .build();
     }
 
@@ -140,6 +165,7 @@ public class MotoTaxiPricingService {
                 .womanPricePerKm(money(pricing.getWomanPricePerKm()))
                 .deliveryMinimumPrice(money(pricing.getDeliveryMinimumPrice()))
                 .deliveryPricePerKm(money(pricing.getDeliveryPricePerKm()))
+                .dispatchRadiusKm(kilometers(pricing.getDispatchRadiusKm()))
                 .build();
     }
 
@@ -199,6 +225,15 @@ public class MotoTaxiPricingService {
         validateNonNegativeMoney(dto.getDeliveryPricePerKm(), "deliveryPricePerKm");
     }
 
+    private void validateDispatchRadius(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "dispatchRadiusKm must be greater than 0"
+            );
+        }
+    }
+
     private void validateNonNegativeMoney(BigDecimal value, String fieldName) {
         if (value == null || value.compareTo(BigDecimal.ZERO) < 0) {
             throw new ResponseStatusException(
@@ -216,6 +251,10 @@ public class MotoTaxiPricingService {
     }
 
     private BigDecimal money(BigDecimal value) {
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal kilometers(BigDecimal value) {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 }

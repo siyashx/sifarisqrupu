@@ -13,9 +13,9 @@ public class OrderScheduler {
         this.dispatchService = dispatchService;
     }
 
-    // Frequent retries are intentional: the first courier is offered immediately
-    // and the dispatch service can fan out to the next nearest courier every
-    // configured interval while the five-minute search deadline remains in force.
+    // Frequent retries are intentional: all currently eligible couriers inside
+    // the configured radius are offered immediately, while newly eligible couriers
+    // can still join during the existing search deadline.
     @Scheduled(fixedDelayString = "${mototaxi.dispatch.scheduler-delay-ms:1000}")
     public void processMotoTaxiDispatchQueue() {
         dispatchService.processAllOpenOrders();

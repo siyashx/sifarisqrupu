@@ -19,4 +19,5 @@ public class MotoTaxiPricingDto {
     private BigDecimal womanPricePerKm;
     private BigDecimal deliveryMinimumPrice;
     private BigDecimal deliveryPricePerKm;
+    private BigDecimal dispatchRadiusKm;
 }

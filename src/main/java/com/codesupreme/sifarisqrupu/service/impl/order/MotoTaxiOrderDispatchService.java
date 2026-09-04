@@ -6,6 +6,7 @@ import com.codesupreme.sifarisqrupu.dto.order.OrderDto;
 import com.codesupreme.sifarisqrupu.model.order.Order;
 import com.codesupreme.sifarisqrupu.model.user.User;
 import com.codesupreme.sifarisqrupu.service.impl.mototaxi.MotoTaxiCourierPushService;
+import com.codesupreme.sifarisqrupu.service.impl.mototaxi.MotoTaxiPricingService;
 import org.modelmapper.ModelMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -37,10 +37,10 @@ public class MotoTaxiOrderDispatchService {
     private final UserRepository userRepository;
     private final ModelMapper modelMapper;
     private final MotoTaxiCourierPushService pushService;
+    private final MotoTaxiPricingService pricingService;
     private final TransactionTemplate transactionTemplate;
     private final long searchTimeoutMillis;
     private final long offerTimeoutMillis;
-    private final long fanoutIntervalMillis;
     private final Object dispatchMutex = new Object();
 
     public MotoTaxiOrderDispatchService(
@@ -48,27 +48,27 @@ public class MotoTaxiOrderDispatchService {
             UserRepository userRepository,
             ModelMapper modelMapper,
             MotoTaxiCourierPushService pushService,
+            MotoTaxiPricingService pricingService,
             PlatformTransactionManager transactionManager,
             @Value("${mototaxi.dispatch.search-timeout-seconds:300}") long searchTimeoutSeconds,
-            @Value("${mototaxi.dispatch.offer-timeout-seconds:60}") long offerTimeoutSeconds,
-            @Value("${mototaxi.dispatch.fanout-interval-seconds:3}") long fanoutIntervalSeconds
+            @Value("${mototaxi.dispatch.offer-timeout-seconds:60}") long offerTimeoutSeconds
     ) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.modelMapper = modelMapper;
         this.pushService = pushService;
+        this.pricingService = pricingService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.searchTimeoutMillis = Math.max(1, searchTimeoutSeconds) * 1000L;
         this.offerTimeoutMillis = Math.max(1, offerTimeoutSeconds) * 1000L;
-        this.fanoutIntervalMillis = Math.max(1, fanoutIntervalSeconds) * 1000L;
     }
 
     /**
-     * Multi-courier fan-out dispatch:
-     * - the nearest eligible courier receives the first offer immediately;
-     * - every fan-out interval another nearest courier can receive the same order;
-     * - every courier keeps its own offer until its individual expiry;
-     * - the first courier that accepts wins atomically and all other offers stop.
+     * Radius-based broadcast dispatch:
+     * - pickup -> courier distance is measured as a straight-line Haversine distance;
+     * - the maximum radius is read from the singleton mototaxi_pricing DB row;
+     * - every currently eligible courier inside that radius receives the same order at once;
+     * - the first courier that accepts wins atomically and every other active offer stops.
      */
     public void processOrder(Long orderId) {
         if (orderId == null) {
@@ -77,7 +77,7 @@ public class MotoTaxiOrderDispatchService {
 
         DispatchChange change;
         synchronized (dispatchMutex) {
-            change = transactionTemplate.execute(status -> reserveNextCourier(orderId));
+            change = transactionTemplate.execute(status -> reserveEligibleCouriers(orderId));
         }
         if (change == null) {
             return;
@@ -91,11 +91,10 @@ public class MotoTaxiOrderDispatchService {
                 false
         );
 
-        if (change.offerTarget() != null) {
-            PushTarget next = change.offerTarget();
+        for (PushTarget target : change.offerTargets()) {
             pushService.sendNewOrderOffer(
-                    next.courierId(),
-                    next.subscriptionId(),
+                    target.courierId(),
+                    target.subscriptionId(),
                     orderId,
                     change.orderType()
             );
@@ -196,6 +195,22 @@ public class MotoTaxiOrderDispatchService {
                         false,
                         List.of(),
                         "order_unavailable",
+                        NO_COURIER
+                );
+            }
+
+            GeoPoint pickup = parsePickup(order.getFromAddress());
+            double dispatchRadiusKm = pricingService.getDispatchRadiusKm();
+            if (pickup == null || !isCourierWithinRadius(courier, pickup, dispatchRadiusKm)) {
+                PushTarget stopTarget = pushTarget(courier);
+                expireCourierOffer(order, courierId);
+                orderRepository.save(order);
+                return AcceptResult.error(
+                        HttpStatus.CONFLICT,
+                        "Sifariş kuryerin cari məsafə limitindən kənardadır",
+                        false,
+                        stopTarget == null ? List.of() : List.of(stopTarget),
+                        "order_out_of_radius",
                         NO_COURIER
                 );
             }
@@ -388,7 +403,65 @@ public class MotoTaxiOrderDispatchService {
         return result.order();
     }
 
-    private DispatchChange reserveNextCourier(Long orderId) {
+    public List<OrderDto> getVisibleOrdersForCourier(Long courierId) {
+        requireCourierId(courierId);
+
+        List<OrderDto> result = transactionTemplate.execute(status -> {
+            Date now = new Date();
+            User courier = userRepository.findById(courierId).orElse(null);
+            if (courier == null || Boolean.TRUE.equals(courier.getIsDisable())) {
+                return List.<OrderDto>of();
+            }
+
+            double dispatchRadiusKm = pricingService.getDispatchRadiusKm();
+            GeoPoint courierPoint = parseCourierLocation(courier);
+
+            return orderRepository.findAll().stream()
+                    .filter(Objects::nonNull)
+                    .filter(order -> !Boolean.TRUE.equals(order.getIsDisable()))
+                    .filter(order -> {
+                        if (Objects.equals(order.getCourierId(), courierId)
+                                && ACTIVE_STATUSES.contains(order.getStatus())) {
+                            return true;
+                        }
+
+                        if (!NO_COURIER.equals(order.getStatus())
+                                || order.getCourierId() != null
+                                || courierPoint == null
+                                || wasCancelledBy(order, courierId)
+                                || !hasActiveOfferForCourier(order, courierId, now)) {
+                            return false;
+                        }
+
+                        GeoPoint pickup = parsePickup(order.getFromAddress());
+                        return pickup != null
+                                && haversineKm(pickup, courierPoint) <= dispatchRadiusKm;
+                    })
+                    .map(order -> modelMapper.map(order, OrderDto.class))
+                    .toList();
+        });
+
+        return result == null ? List.of() : result;
+    }
+
+    private boolean hasActiveOfferForCourier(Order order, Long courierId, Date now) {
+        Date expiry = order.getActiveOfferExpirations() == null
+                ? null
+                : order.getActiveOfferExpirations().get(courierId);
+
+        if (expiry == null && Objects.equals(order.getOfferedCourierId(), courierId)) {
+            expiry = order.getOfferExpiresAt();
+        }
+
+        return expiry != null && expiry.after(now);
+    }
+
+    private boolean wasCancelledBy(Order order, Long courierId) {
+        return order.getCancelledCourierIds() != null
+                && order.getCancelledCourierIds().contains(courierId);
+    }
+
+    private DispatchChange reserveEligibleCouriers(Long orderId) {
         Date now = new Date();
         Order order = lockOrder(orderId);
 
@@ -399,7 +472,29 @@ public class MotoTaxiOrderDispatchService {
         normalizeSearchDeadline(order, now);
         normalizeLegacyOfferState(order, now);
 
-        List<PushTarget> stopTargets = pruneExpiredOrUnavailableOffers(order, now);
+        GeoPoint pickup = parsePickup(order.getFromAddress());
+        if (pickup == null) {
+            List<PushTarget> stopTargets = collectActiveOfferTargets(order, null);
+            markAllActiveOffersCancelled(order);
+            order.setIsDisable(true);
+            clearOfferState(order);
+            orderRepository.save(order);
+            return new DispatchChange(
+                    order.getOrderType(),
+                    List.of(),
+                    stopTargets,
+                    "order_unavailable",
+                    "cancelled"
+            );
+        }
+
+        double dispatchRadiusKm = pricingService.getDispatchRadiusKm();
+        List<PushTarget> stopTargets = pruneExpiredOrUnavailableOffers(
+                order,
+                now,
+                pickup,
+                dispatchRadiusKm
+        );
 
         if (isSearchExpired(order, now)) {
             for (Long courierId : new ArrayList<>(activeOffers(order).keySet())) {
@@ -410,38 +505,10 @@ public class MotoTaxiOrderDispatchService {
             orderRepository.save(order);
             return new DispatchChange(
                     order.getOrderType(),
-                    null,
+                    List.of(),
                     stopTargets,
                     "search_expired",
                     "cancelled"
-            );
-        }
-
-        GeoPoint pickup = parsePickup(order.getFromAddress());
-        if (pickup == null) {
-            stopTargets = mergeTargets(stopTargets, collectActiveOfferTargets(order, null));
-            markAllActiveOffersCancelled(order);
-            order.setIsDisable(true);
-            clearOfferState(order);
-            orderRepository.save(order);
-            return new DispatchChange(
-                    order.getOrderType(),
-                    null,
-                    stopTargets,
-                    "order_unavailable",
-                    "cancelled"
-            );
-        }
-
-        Date lastOfferAt = order.getLastOfferAt();
-        if (lastOfferAt != null && now.getTime() - lastOfferAt.getTime() < fanoutIntervalMillis) {
-            orderRepository.save(order);
-            return new DispatchChange(
-                    order.getOrderType(),
-                    null,
-                    stopTargets,
-                    "offer_expired",
-                    NO_COURIER
             );
         }
 
@@ -457,42 +524,54 @@ public class MotoTaxiOrderDispatchService {
                 .filter(user -> isCourierEligible(user, excluded))
                 .map(user -> candidate(user, pickup))
                 .filter(Objects::nonNull)
-                .sorted(Comparator.comparingDouble(CourierCandidate::distanceKm))
+                .filter(candidate -> candidate.distanceKm() <= dispatchRadiusKm)
                 .toList();
 
         if (candidates.isEmpty()) {
             orderRepository.save(order);
             return new DispatchChange(
                     order.getOrderType(),
-                    null,
+                    List.of(),
                     stopTargets,
                     "offer_expired",
                     NO_COURIER
             );
         }
 
-        CourierCandidate selected = candidates.get(0);
         Date expiresAt = new Date(now.getTime() + offerTimeoutMillis);
+        List<PushTarget> offerTargets = new ArrayList<>();
 
-        activeOffers(order).put(selected.user().getId(), expiresAt);
+        // All candidates are reserved in the same locked transaction. No courier
+        // gets a timing advantage from list ordering; every offer has one expiry.
+        for (CourierCandidate candidate : candidates) {
+            Long courierId = candidate.user().getId();
+            activeOffers(order).put(courierId, expiresAt);
+
+            PushTarget target = pushTarget(candidate.user());
+            if (target != null) {
+                offerTargets.add(target);
+            }
+        }
+
         order.setLastOfferAt(now);
-
-        // Legacy projection for older app versions. New Flutter builds use the
-        // per-courier activeOfferExpirations map.
-        order.setOfferedCourierId(selected.user().getId());
-        order.setOfferExpiresAt(expiresAt);
+        syncLegacyOffer(order);
         orderRepository.save(order);
 
         return new DispatchChange(
                 order.getOrderType(),
-                pushTarget(selected.user()),
+                offerTargets,
                 stopTargets,
                 "offer_expired",
                 NO_COURIER
         );
     }
 
-    private List<PushTarget> pruneExpiredOrUnavailableOffers(Order order, Date now) {
+    private List<PushTarget> pruneExpiredOrUnavailableOffers(
+            Order order,
+            Date now,
+            GeoPoint pickup,
+            double dispatchRadiusKm
+    ) {
         Map<Long, Date> offers = activeOffers(order);
         if (offers.isEmpty()) {
             return List.of();
@@ -508,7 +587,9 @@ public class MotoTaxiOrderDispatchService {
             User courier = courierId == null ? null : userRepository.findById(courierId).orElse(null);
 
             boolean expired = expiresAt == null || !expiresAt.after(now);
-            boolean unavailable = courier == null || !isCourierEligible(courier, busyCourierIds);
+            boolean unavailable = courier == null
+                    || !isCourierEligible(courier, busyCourierIds)
+                    || !isCourierWithinRadius(courier, pickup, dispatchRadiusKm);
 
             if (expired || unavailable) {
                 toRemove.add(courierId);
@@ -556,6 +637,14 @@ public class MotoTaxiOrderDispatchService {
             return null;
         }
         return new CourierCandidate(user, haversineKm(pickup, courier));
+    }
+
+    private boolean isCourierWithinRadius(User user, GeoPoint pickup, double radiusKm) {
+        CourierCandidate candidate = candidate(user, pickup);
+        return candidate != null
+                && Double.isFinite(radiusKm)
+                && radiusKm > 0
+                && candidate.distanceKm() <= radiusKm;
     }
 
     private GeoPoint parseCourierLocation(User user) {
@@ -778,13 +867,13 @@ public class MotoTaxiOrderDispatchService {
 
     private record DispatchChange(
             String orderType,
-            PushTarget offerTarget,
+            List<PushTarget> offerTargets,
             List<PushTarget> stopTargets,
             String stopEvent,
             String stopStatus
     ) {
         static DispatchChange none(String orderType) {
-            return new DispatchChange(orderType, null, List.of(), "order_unavailable", NO_COURIER);
+            return new DispatchChange(orderType, List.of(), List.of(), "order_unavailable", NO_COURIER);
         }
     }
 

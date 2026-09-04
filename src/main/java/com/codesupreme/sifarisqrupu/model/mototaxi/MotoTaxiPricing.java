@@ -39,4 +39,7 @@ public class MotoTaxiPricing {
 
     @Column(name = "delivery_price_per_km", nullable = false, precision = 10, scale = 2)
     private BigDecimal deliveryPricePerKm;
+
+    @Column(name = "dispatch_radius_km", precision = 10, scale = 2)
+    private BigDecimal dispatchRadiusKm;
 }

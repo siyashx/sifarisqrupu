@@ -29,6 +29,13 @@ public class OrderController {
         return ResponseEntity.ok(service.getAllOrder());
     }
 
+    @GetMapping("/courier/{courierId}/visible")
+    public ResponseEntity<List<OrderDto>> getVisibleOrdersForCourier(
+            @PathVariable("courierId") Long courierId
+    ) {
+        return ResponseEntity.ok(dispatchService.getVisibleOrdersForCourier(courierId));
+    }
+
     @GetMapping("/{orderId}")
     public ResponseEntity<OrderDto> getOrderById(@PathVariable("orderId") Long id) {
         OrderDto det = service.getOrderById(id);
@@ -39,8 +46,8 @@ public class OrderController {
     public ResponseEntity<OrderDto> createOrder(@RequestBody OrderDto dto) {
         OrderDto created = service.createOrder(dto);
 
-        // The order is created even when nobody is online. Dispatch either reserves
-        // the nearest courier immediately or leaves it open for scheduler retries.
+        // The order is created even when nobody is online. Dispatch immediately
+        // broadcasts it to every eligible courier inside the DB-configured radius.
         dispatchService.processOrder(created.getId());
 
         OrderDto fresh = service.getOrderById(created.getId());
