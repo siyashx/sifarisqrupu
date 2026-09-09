@@ -81,6 +81,11 @@ public interface WhatsappGroupDailyStatRepository
     List<WhatsappGroupDailyStat>
     findByStatDateOrderByOrderCountDesc(LocalDate statDate);
 
+    long deleteByInstanceNameAndGroupJid(
+            String instanceName,
+            String groupJid
+    );
+
     @Query(
             value = """
                     SELECT

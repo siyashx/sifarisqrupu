@@ -4,7 +4,6 @@ import com.codesupreme.sifarisqrupu.dao.superadmin.WhatsappBridgeBlockedPhoneRep
 import com.codesupreme.sifarisqrupu.dao.superadmin.WhatsappBridgeGroupRepository;
 import com.codesupreme.sifarisqrupu.dao.superadmin.WhatsappBridgeInstanceRepository;
 import com.codesupreme.sifarisqrupu.dao.superadmin.WhatsappGroupDailyStatRepository;
-import com.codesupreme.sifarisqrupu.dao.superadmin.WhatsappGroupUserDailyStatRepository;
 import com.codesupreme.sifarisqrupu.dto.superadmin.*;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeBlockedPhone;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeGroup;
@@ -40,7 +39,6 @@ public class WhatsappBridgeConfigService {
     private final WhatsappBridgeGroupRepository groupRepository;
     private final WhatsappBridgeBlockedPhoneRepository blockedPhoneRepository;
     private final WhatsappGroupDailyStatRepository groupStatRepository;
-    private final WhatsappGroupUserDailyStatRepository userStatRepository;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final String evolutionApiBase;
@@ -51,7 +49,6 @@ public class WhatsappBridgeConfigService {
             WhatsappBridgeGroupRepository groupRepository,
             WhatsappBridgeBlockedPhoneRepository blockedPhoneRepository,
             WhatsappGroupDailyStatRepository groupStatRepository,
-            WhatsappGroupUserDailyStatRepository userStatRepository,
             ObjectMapper objectMapper,
             @Value("${evolution.api.base:http://127.0.0.1:18080}") String evolutionApiBase,
             @Value("${evolution.api.key:}") String evolutionApiKey
@@ -60,7 +57,6 @@ public class WhatsappBridgeConfigService {
         this.groupRepository = groupRepository;
         this.blockedPhoneRepository = blockedPhoneRepository;
         this.groupStatRepository = groupStatRepository;
-        this.userStatRepository = userStatRepository;
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
@@ -560,31 +556,6 @@ public class WhatsappBridgeConfigService {
         if (enabled) {
             ensureStatisticsRow(saved);
         }
-        return saved;
-    }
-
-    /*
-     * Admin paneldə qrup çıxarılanda qrupun özü kataloqda disabled qalır ki,
-     * Evolution sync onu avtomatik yenidən aktiv etməsin. Statistik tarixçə isə
-     * istifadəçinin təsdiq etdiyi kimi daimi silinir.
-     */
-    @Transactional
-    public WhatsappBridgeGroup removeGroupAndStatistics(Long id) {
-        WhatsappBridgeGroup group = groupRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Qrup tapılmadı"));
-
-        group.setEnabled(false);
-        WhatsappBridgeGroup saved = groupRepository.save(group);
-
-        groupStatRepository.deleteByInstanceNameAndGroupJid(
-                saved.getInstanceName(),
-                saved.getGroupJid()
-        );
-        userStatRepository.deleteByInstanceNameAndGroupJid(
-                saved.getInstanceName(),
-                saved.getGroupJid()
-        );
-
         return saved;
     }
 

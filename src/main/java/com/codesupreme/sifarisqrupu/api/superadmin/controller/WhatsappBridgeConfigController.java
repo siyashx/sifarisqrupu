@@ -79,7 +79,7 @@ public class WhatsappBridgeConfigController {
     @DeleteMapping("/groups/{id}")
     public ResponseEntity<?> removeGroup(@PathVariable Long id) {
         try {
-            return ResponseEntity.ok(service.setGroupEnabled(id, false));
+            return ResponseEntity.ok(service.removeGroupAndStatistics(id));
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(error.getMessage());
         }

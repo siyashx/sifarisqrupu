@@ -54,6 +54,11 @@ public interface WhatsappGroupUserDailyStatRepository
             String groupJid
     );
 
+    long deleteByInstanceNameAndGroupJid(
+            String instanceName,
+            String groupJid
+    );
+
     @Query(
             value = """
                     SELECT
