@@ -46,6 +46,38 @@ public interface WhatsappGroupDailyStatRepository
             @Param("statDate") LocalDate statDate
     );
 
+    @Modifying
+    @Transactional
+    @Query(
+            value = """
+                    INSERT INTO whatsapp_group_daily_stat
+                    (
+                        instance_name,
+                        group_jid,
+                        group_name,
+                        stat_date,
+                        order_count
+                    )
+                    VALUES
+                    (
+                        :instanceName,
+                        :groupJid,
+                        :groupName,
+                        :statDate,
+                        0
+                    )
+                    ON DUPLICATE KEY UPDATE
+                        group_name = VALUES(group_name)
+                    """,
+            nativeQuery = true
+    )
+    void ensureGroupRow(
+            @Param("instanceName") String instanceName,
+            @Param("groupJid") String groupJid,
+            @Param("groupName") String groupName,
+            @Param("statDate") LocalDate statDate
+    );
+
     List<WhatsappGroupDailyStat>
     findByStatDateOrderByOrderCountDesc(LocalDate statDate);
 
