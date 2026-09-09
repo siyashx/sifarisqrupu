@@ -7,6 +7,7 @@ import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeBlockedPhone;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeGroup;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeInstance;
 import com.codesupreme.sifarisqrupu.service.impl.superadmin.WhatsappBridgeConfigService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -41,6 +42,17 @@ public class WhatsappBridgeConfigController {
             @RequestParam(defaultValue = "false") boolean enabledOnly
     ) {
         return ResponseEntity.ok(service.getGroups(instanceName, enabledOnly));
+    }
+
+    @GetMapping("/discover-groups")
+    public ResponseEntity<?> discoverGroups(@RequestParam String instanceName) {
+        try {
+            return ResponseEntity.ok(service.discoverEvolutionGroups(instanceName));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(error.getMessage());
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(error.getMessage());
+        }
     }
 
     @PostMapping("/groups")

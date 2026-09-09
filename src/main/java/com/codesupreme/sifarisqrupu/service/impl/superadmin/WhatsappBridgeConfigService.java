@@ -8,13 +8,27 @@ import com.codesupreme.sifarisqrupu.dto.superadmin.*;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeBlockedPhone;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeGroup;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeInstance;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class WhatsappBridgeConfigService {
@@ -25,17 +39,30 @@ public class WhatsappBridgeConfigService {
     private final WhatsappBridgeGroupRepository groupRepository;
     private final WhatsappBridgeBlockedPhoneRepository blockedPhoneRepository;
     private final WhatsappGroupDailyStatRepository groupStatRepository;
+    private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
+    private final String evolutionApiBase;
+    private final String evolutionApiKey;
 
     public WhatsappBridgeConfigService(
             WhatsappBridgeInstanceRepository instanceRepository,
             WhatsappBridgeGroupRepository groupRepository,
             WhatsappBridgeBlockedPhoneRepository blockedPhoneRepository,
-            WhatsappGroupDailyStatRepository groupStatRepository
+            WhatsappGroupDailyStatRepository groupStatRepository,
+            ObjectMapper objectMapper,
+            @Value("${evolution.api.base:http://127.0.0.1:18080}") String evolutionApiBase,
+            @Value("${evolution.api.key:}") String evolutionApiKey
     ) {
         this.instanceRepository = instanceRepository;
         this.groupRepository = groupRepository;
         this.blockedPhoneRepository = blockedPhoneRepository;
         this.groupStatRepository = groupStatRepository;
+        this.objectMapper = objectMapper;
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
+        this.evolutionApiBase = clean(evolutionApiBase).replaceAll("/+$", "");
+        this.evolutionApiKey = clean(evolutionApiKey);
     }
 
     @Transactional
@@ -90,6 +117,132 @@ public class WhatsappBridgeConfigService {
                 }
             }
         }
+    }
+
+    public List<WhatsappEvolutionGroupResponse> discoverEvolutionGroups(String instanceName) {
+        String normalizedInstance = requireText(instanceName, "instanceName");
+
+        if (instanceRepository.findByInstanceName(normalizedInstance).isEmpty()) {
+            throw new IllegalArgumentException("Evolution instance tapılmadı");
+        }
+
+        if (evolutionApiBase.isBlank() || evolutionApiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "Evolution API bağlantısı backend üçün konfiqurasiya edilməyib"
+            );
+        }
+
+        try {
+            String encodedInstance = URLEncoder
+                    .encode(normalizedInstance, StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+            URI uri = URI.create(
+                    evolutionApiBase
+                            + "/group/fetchAllGroups/"
+                            + encodedInstance
+                            + "?getParticipants=false"
+            );
+
+            HttpRequest request = HttpRequest.newBuilder(uri)
+                    .timeout(Duration.ofSeconds(12))
+                    .header("apikey", evolutionApiKey)
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+            );
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException(
+                        "Evolution API qrupları qaytarmadı (HTTP "
+                                + response.statusCode()
+                                + ")"
+                );
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode groupArray = extractGroupArray(root);
+            Map<String, WhatsappEvolutionGroupResponse> uniqueGroups = new LinkedHashMap<>();
+
+            if (groupArray != null && groupArray.isArray()) {
+                for (JsonNode node : groupArray) {
+                    String groupJid = firstText(
+                            node,
+                            "id", "groupJid", "jid", "remoteJid", "groupId"
+                    );
+                    if (!isGroupJid(groupJid)) continue;
+
+                    String groupName = firstText(
+                            node,
+                            "subject", "name", "groupName", "pushName"
+                    );
+                    if (groupName.isBlank()) {
+                        groupName = "WhatsApp qrupu";
+                    }
+
+                    uniqueGroups.putIfAbsent(
+                            groupJid,
+                            new WhatsappEvolutionGroupResponse(groupJid, groupName)
+                    );
+                }
+            }
+
+            List<WhatsappEvolutionGroupResponse> groups = new ArrayList<>(uniqueGroups.values());
+            groups.sort(Comparator.comparing(
+                    WhatsappEvolutionGroupResponse::groupName,
+                    String.CASE_INSENSITIVE_ORDER
+            ));
+            return groups;
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Evolution API sorğusu dayandırıldı", error);
+        } catch (IllegalStateException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new IllegalStateException(
+                    "Evolution API-dən qrupları almaq mümkün olmadı",
+                    error
+            );
+        }
+    }
+
+    private JsonNode extractGroupArray(JsonNode root) {
+        if (root == null || root.isNull()) return null;
+        if (root.isArray()) return root;
+
+        JsonNode data = root.get("data");
+        if (data != null && data.isArray()) return data;
+
+        JsonNode groups = root.get("groups");
+        if (groups != null && groups.isArray()) return groups;
+
+        if (data != null && data.isObject()) {
+            JsonNode nestedGroups = data.get("groups");
+            if (nestedGroups != null && nestedGroups.isArray()) return nestedGroups;
+        }
+
+        JsonNode response = root.get("response");
+        if (response != null && response.isArray()) return response;
+        if (response != null && response.isObject()) {
+            JsonNode nestedGroups = response.get("groups");
+            if (nestedGroups != null && nestedGroups.isArray()) return nestedGroups;
+        }
+
+        return null;
+    }
+
+    private String firstText(JsonNode node, String... fields) {
+        if (node == null || fields == null) return "";
+        for (String field : fields) {
+            JsonNode value = node.get(field);
+            if (value == null || value.isNull() || value.isContainerNode()) continue;
+            String text = clean(value.asText());
+            if (!text.isBlank()) return text;
+        }
+        return "";
     }
 
     public List<WhatsappBridgeInstance> getInstances() {
