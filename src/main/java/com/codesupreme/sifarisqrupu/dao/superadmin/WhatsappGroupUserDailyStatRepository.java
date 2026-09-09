@@ -70,4 +70,44 @@ public interface WhatsappGroupUserDailyStatRepository
     findOverallUserStatistics(
             @Param("statDate") LocalDate statDate
     );
+
+    @Query(
+            value = """
+                    SELECT
+                        phone AS phone,
+                        SUM(message_count) AS messageCount
+                    FROM whatsapp_group_user_daily_stat
+                    WHERE stat_date BETWEEN :fromDate AND :toDate
+                      AND instance_name = :instanceName
+                      AND group_jid = :groupJid
+                    GROUP BY phone
+                    ORDER BY SUM(message_count) DESC
+                    """,
+            nativeQuery = true
+    )
+    List<UserMessageStatProjection>
+    findGroupUserStatisticsBetween(
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate,
+            @Param("instanceName") String instanceName,
+            @Param("groupJid") String groupJid
+    );
+
+    @Query(
+            value = """
+                    SELECT
+                        phone AS phone,
+                        SUM(message_count) AS messageCount
+                    FROM whatsapp_group_user_daily_stat
+                    WHERE stat_date BETWEEN :fromDate AND :toDate
+                    GROUP BY phone
+                    ORDER BY SUM(message_count) DESC
+                    """,
+            nativeQuery = true
+    )
+    List<UserMessageStatProjection>
+    findOverallUserStatisticsBetween(
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate
+    );
 }

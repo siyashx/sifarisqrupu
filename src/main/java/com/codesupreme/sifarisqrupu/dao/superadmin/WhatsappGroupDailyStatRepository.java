@@ -48,4 +48,24 @@ public interface WhatsappGroupDailyStatRepository
 
     List<WhatsappGroupDailyStat>
     findByStatDateOrderByOrderCountDesc(LocalDate statDate);
+
+    @Query(
+            value = """
+                    SELECT
+                        instance_name AS instanceName,
+                        group_jid AS groupJid,
+                        MAX(group_name) AS groupName,
+                        SUM(order_count) AS orderCount
+                    FROM whatsapp_group_daily_stat
+                    WHERE stat_date BETWEEN :fromDate AND :toDate
+                    GROUP BY instance_name, group_jid
+                    ORDER BY SUM(order_count) DESC
+                    """,
+            nativeQuery = true
+    )
+    List<GroupOrderStatProjection>
+    findGroupStatisticsBetween(
+            @Param("fromDate") LocalDate fromDate,
+            @Param("toDate") LocalDate toDate
+    );
 }
