@@ -76,6 +76,18 @@ public class WhatsappBridgeConfigController {
         }
     }
 
+    @PutMapping("/groups/{id}/flow-type")
+    public ResponseEntity<?> setGroupFlowType(
+            @PathVariable Long id,
+            @RequestParam String value
+    ) {
+        try {
+            return ResponseEntity.ok(service.setGroupFlowType(id, value));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(error.getMessage());
+        }
+    }
+
     @DeleteMapping("/groups/{id}")
     public ResponseEntity<?> removeGroup(@PathVariable Long id) {
         try {

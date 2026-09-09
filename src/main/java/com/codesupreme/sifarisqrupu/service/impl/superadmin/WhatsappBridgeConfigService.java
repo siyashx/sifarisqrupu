@@ -35,6 +35,8 @@ import java.util.Map;
 public class WhatsappBridgeConfigService {
 
     private static final ZoneId BAKU_ZONE = ZoneId.of("Asia/Baku");
+    private static final String FLOW_ORDER_GROUP = "ORDER_GROUP";
+    private static final String FLOW_MOTO_TAKSI = "MOTO_TAKSI";
 
     private final WhatsappBridgeInstanceRepository instanceRepository;
     private final WhatsappBridgeGroupRepository groupRepository;
@@ -108,7 +110,15 @@ public class WhatsappBridgeConfigService {
                             .instanceName(instanceName)
                             .groupJid(groupJid)
                             .enabled(Boolean.TRUE.equals(groupItem.getEnabledByDefault()))
+                            .flowType(normalizeFlowType(groupItem.getFlowType()))
                             .build();
+                } else if (clean(group.getFlowType()).isBlank()) {
+                    /*
+                     * Yeni flow_type sütunu üçün regression-safe backfill.
+                     * Bridge köhnə iki Moto Taksi JID-ni MOTO_TAKSI kimi göndərir,
+                     * qalan qruplar ORDER_GROUP olur.
+                     */
+                    group.setFlowType(normalizeFlowType(groupItem.getFlowType()));
                 }
 
                 String groupName = clean(groupItem.getGroupName());
@@ -544,6 +554,16 @@ public class WhatsappBridgeConfigService {
             group.setGroupName(groupJid);
         }
 
+        String requestedFlowType = clean(
+                request == null ? null : request.getFlowType()
+        );
+        if (!requestedFlowType.isBlank()) {
+            group.setFlowType(normalizeFlowType(requestedFlowType));
+        } else if (clean(group.getFlowType()).isBlank()) {
+            // Köhnə admin client-ləri üçün backward-compatible default.
+            group.setFlowType(FLOW_ORDER_GROUP);
+        }
+
         group.setEnabled(true);
         group.setLastSeenAt(LocalDateTime.now());
         WhatsappBridgeGroup saved = groupRepository.save(group);
@@ -561,6 +581,15 @@ public class WhatsappBridgeConfigService {
             ensureStatisticsRow(saved);
         }
         return saved;
+    }
+
+    @Transactional
+    public WhatsappBridgeGroup setGroupFlowType(Long id, String flowType) {
+        WhatsappBridgeGroup group = groupRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Qrup tapılmadı"));
+
+        group.setFlowType(normalizeFlowType(flowType));
+        return groupRepository.save(group);
     }
 
     /*
@@ -642,6 +671,16 @@ public class WhatsappBridgeConfigService {
                 group.getGroupName(),
                 LocalDate.now(BAKU_ZONE)
         );
+    }
+
+    private String normalizeFlowType(String value) {
+        String normalized = clean(value).toUpperCase();
+
+        if (FLOW_MOTO_TAKSI.equals(normalized)) {
+            return FLOW_MOTO_TAKSI;
+        }
+
+        return FLOW_ORDER_GROUP;
     }
 
     private String requireText(String value, String field) {

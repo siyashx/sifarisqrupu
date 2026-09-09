@@ -7,4 +7,5 @@ public class WhatsappBridgeGroupSyncItem {
     private String groupJid;
     private String groupName;
     private Boolean enabledByDefault;
+    private String flowType;
 }

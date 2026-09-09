@@ -42,6 +42,17 @@ public class WhatsappBridgeGroup {
     @Column(name = "enabled", nullable = false)
     private Boolean enabled;
 
+    /*
+     * ORDER_GROUP -> adi Sifariş Qrupu axını (groupId=0)
+     * MOTO_TAKSI  -> Moto Taksi axını (groupId=1 + Moto Taksi push channel)
+     *
+     * nullable saxlanılır ki mövcud DB-də Hibernate schema-update problemsiz
+     * yeni sütunu əlavə edə bilsin. Service/bridge null dəyəri təhlükəsiz
+     * fallback ilə şərh edir və catalog sync mövcud sətirləri backfill edir.
+     */
+    @Column(name = "flow_type", length = 24)
+    private String flowType;
+
     @Column(name = "last_seen_at")
     private LocalDateTime lastSeenAt;
 }

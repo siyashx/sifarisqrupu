@@ -7,4 +7,5 @@ public class WhatsappBridgeGroupRequest {
     private String instanceName;
     private String groupJid;
     private String groupName;
+    private String flowType;
 }
