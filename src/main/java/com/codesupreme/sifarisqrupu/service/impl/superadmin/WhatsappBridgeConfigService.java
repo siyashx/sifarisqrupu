@@ -119,6 +119,7 @@ public class WhatsappBridgeConfigService {
         }
     }
 
+    @Transactional
     public List<WhatsappEvolutionGroupResponse> discoverEvolutionGroups(String instanceName) {
         String normalizedInstance = requireText(instanceName, "instanceName");
 
@@ -126,86 +127,199 @@ public class WhatsappBridgeConfigService {
             throw new IllegalArgumentException("Evolution instance tapılmadı");
         }
 
+        List<WhatsappEvolutionGroupResponse> cachedGroups =
+                getCachedEvolutionGroups(normalizedInstance);
+
+        /*
+         * Admin picker üçün Evolution canlı sorğusu best-effort-dur.
+         * wa-bridge onsuz da qrup kataloqunu periodik olaraq DB-yə sync edir.
+         * Ona görə Evolution qısa müddətlik cavab verməsə belə son uğurlu
+         * kataloqu qaytarırıq və admin ekranını boş/xəta vəziyyətinə salmırıq.
+         */
         if (evolutionApiBase.isBlank() || evolutionApiKey.isBlank()) {
+            if (!cachedGroups.isEmpty()) {
+                return cachedGroups;
+            }
             throw new IllegalStateException(
                     "Evolution API bağlantısı backend üçün konfiqurasiya edilməyib"
             );
         }
 
-        try {
-            String encodedInstance = URLEncoder
-                    .encode(normalizedInstance, StandardCharsets.UTF_8)
-                    .replace("+", "%20");
-            URI uri = URI.create(
-                    evolutionApiBase
-                            + "/group/fetchAllGroups/"
-                            + encodedInstance
-                            + "?getParticipants=false"
-            );
+        IllegalStateException lastError = null;
 
-            HttpRequest request = HttpRequest.newBuilder(uri)
-                    .timeout(Duration.ofSeconds(12))
-                    .header("apikey", evolutionApiKey)
-                    .header("Accept", "application/json")
-                    .GET()
-                    .build();
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                List<WhatsappEvolutionGroupResponse> liveGroups =
+                        fetchEvolutionGroupsOnce(normalizedInstance);
 
-            HttpResponse<String> response = httpClient.send(
-                    request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
-            );
+                if (!liveGroups.isEmpty()) {
+                    cacheEvolutionGroups(normalizedInstance, liveGroups);
+                    return liveGroups;
+                }
 
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                if (!cachedGroups.isEmpty()) {
+                    return cachedGroups;
+                }
+
+                return liveGroups;
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                if (!cachedGroups.isEmpty()) {
+                    return cachedGroups;
+                }
                 throw new IllegalStateException(
-                        "Evolution API qrupları qaytarmadı (HTTP "
-                                + response.statusCode()
-                                + ")"
+                        "Evolution API sorğusu dayandırıldı",
+                        error
                 );
-            }
+            } catch (Exception error) {
+                lastError = error instanceof IllegalStateException
+                        ? (IllegalStateException) error
+                        : new IllegalStateException(
+                                "Evolution API-dən qrupları almaq mümkün olmadı",
+                                error
+                        );
 
-            JsonNode root = objectMapper.readTree(response.body());
-            JsonNode groupArray = extractGroupArray(root);
-            Map<String, WhatsappEvolutionGroupResponse> uniqueGroups = new LinkedHashMap<>();
-
-            if (groupArray != null && groupArray.isArray()) {
-                for (JsonNode node : groupArray) {
-                    String groupJid = firstText(
-                            node,
-                            "id", "groupJid", "jid", "remoteJid", "groupId"
-                    );
-                    if (!isGroupJid(groupJid)) continue;
-
-                    String groupName = firstText(
-                            node,
-                            "subject", "name", "groupName", "pushName"
-                    );
-                    if (groupName.isBlank()) {
-                        groupName = "WhatsApp qrupu";
+                if (attempt < 3) {
+                    try {
+                        Thread.sleep(300L * attempt);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        if (!cachedGroups.isEmpty()) {
+                            return cachedGroups;
+                        }
+                        throw new IllegalStateException(
+                                "Evolution API sorğusu dayandırıldı",
+                                interrupted
+                        );
                     }
-
-                    uniqueGroups.putIfAbsent(
-                            groupJid,
-                            new WhatsappEvolutionGroupResponse(groupJid, groupName)
-                    );
                 }
             }
+        }
 
-            List<WhatsappEvolutionGroupResponse> groups = new ArrayList<>(uniqueGroups.values());
-            groups.sort(Comparator.comparing(
-                    WhatsappEvolutionGroupResponse::groupName,
-                    String.CASE_INSENSITIVE_ORDER
-            ));
-            return groups;
-        } catch (InterruptedException error) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Evolution API sorğusu dayandırıldı", error);
-        } catch (IllegalStateException error) {
-            throw error;
-        } catch (Exception error) {
+        if (!cachedGroups.isEmpty()) {
+            return cachedGroups;
+        }
+
+        throw lastError != null
+                ? lastError
+                : new IllegalStateException(
+                        "Evolution API-dən qrupları almaq mümkün olmadı"
+                );
+    }
+
+    private List<WhatsappEvolutionGroupResponse> fetchEvolutionGroupsOnce(
+            String normalizedInstance
+    ) throws Exception {
+        String encodedInstance = URLEncoder
+                .encode(normalizedInstance, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        URI uri = URI.create(
+                evolutionApiBase
+                        + "/group/fetchAllGroups/"
+                        + encodedInstance
+                        + "?getParticipants=false"
+        );
+
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofSeconds(5))
+                .header("apikey", evolutionApiKey)
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(
+                request,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+        );
+
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IllegalStateException(
-                    "Evolution API-dən qrupları almaq mümkün olmadı",
-                    error
+                    "Evolution API qrupları qaytarmadı (HTTP "
+                            + response.statusCode()
+                            + ")"
             );
+        }
+
+        JsonNode root = objectMapper.readTree(response.body());
+        JsonNode groupArray = extractGroupArray(root);
+        Map<String, WhatsappEvolutionGroupResponse> uniqueGroups =
+                new LinkedHashMap<>();
+
+        if (groupArray != null && groupArray.isArray()) {
+            for (JsonNode node : groupArray) {
+                String groupJid = firstText(
+                        node,
+                        "id", "groupJid", "jid", "remoteJid", "groupId"
+                );
+                if (!isGroupJid(groupJid)) continue;
+
+                String groupName = firstText(
+                        node,
+                        "subject", "name", "groupName", "pushName"
+                );
+                if (groupName.isBlank()) {
+                    groupName = "WhatsApp qrupu";
+                }
+
+                uniqueGroups.putIfAbsent(
+                        groupJid,
+                        new WhatsappEvolutionGroupResponse(groupJid, groupName)
+                );
+            }
+        }
+
+        List<WhatsappEvolutionGroupResponse> groups =
+                new ArrayList<>(uniqueGroups.values());
+        groups.sort(Comparator.comparing(
+                WhatsappEvolutionGroupResponse::groupName,
+                String.CASE_INSENSITIVE_ORDER
+        ));
+        return groups;
+    }
+
+    private List<WhatsappEvolutionGroupResponse> getCachedEvolutionGroups(
+            String instanceName
+    ) {
+        return groupRepository
+                .findByInstanceNameOrderByGroupNameAsc(instanceName)
+                .stream()
+                .filter(group -> isGroupJid(group.getGroupJid()))
+                .map(group -> new WhatsappEvolutionGroupResponse(
+                        group.getGroupJid(),
+                        clean(group.getGroupName()).isBlank()
+                                ? "WhatsApp qrupu"
+                                : clean(group.getGroupName())
+                ))
+                .toList();
+    }
+
+    private void cacheEvolutionGroups(
+            String instanceName,
+            List<WhatsappEvolutionGroupResponse> groups
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+
+        for (WhatsappEvolutionGroupResponse item : groups) {
+            String groupJid = clean(item.groupJid());
+            if (!isGroupJid(groupJid)) continue;
+
+            WhatsappBridgeGroup group = groupRepository
+                    .findByInstanceNameAndGroupJid(instanceName, groupJid)
+                    .orElseGet(() -> WhatsappBridgeGroup.builder()
+                            .instanceName(instanceName)
+                            .groupJid(groupJid)
+                            .enabled(false)
+                            .build());
+
+            String groupName = clean(item.groupName());
+            group.setGroupName(
+                    groupName.isBlank() ? "WhatsApp qrupu" : groupName
+            );
+            if (group.getEnabled() == null) {
+                group.setEnabled(false);
+            }
+            group.setLastSeenAt(now);
+            groupRepository.save(group);
         }
     }
 
