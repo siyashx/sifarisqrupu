@@ -151,6 +151,13 @@ public class MotoTaxiChatCrossAppPushService {
             final String userType = clean(user.getUserType()).toLowerCase(Locale.ROOT);
             if (userType.contains("customer")) continue;
 
+            // Elehber MotoTaksi Chat notifications are courier-work alerts.
+            // A courier who explicitly went offline must not receive them.
+            // Keep Zakaz recipient behavior unchanged.
+            if (APP_ELEHBER.equals(targetApp) && !Boolean.TRUE.equals(user.getOnline())) {
+                continue;
+            }
+
             final String prefix = APP_ELEHBER.equals(targetApp)
                     ? "elehber_user_"
                     : "zakaz_user_";
