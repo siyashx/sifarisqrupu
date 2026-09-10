@@ -7,6 +7,7 @@ import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeBlockedPhone;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeGroup;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappBridgeInstance;
 import com.codesupreme.sifarisqrupu.service.impl.superadmin.WhatsappBridgeConfigService;
+import com.codesupreme.sifarisqrupu.service.impl.superadmin.WhatsappBridgeRuntimeRefreshNotifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,9 +21,14 @@ import java.util.Map;
 public class WhatsappBridgeConfigController {
 
     private final WhatsappBridgeConfigService service;
+    private final WhatsappBridgeRuntimeRefreshNotifier runtimeRefreshNotifier;
 
-    public WhatsappBridgeConfigController(WhatsappBridgeConfigService service) {
+    public WhatsappBridgeConfigController(
+            WhatsappBridgeConfigService service,
+            WhatsappBridgeRuntimeRefreshNotifier runtimeRefreshNotifier
+    ) {
         this.service = service;
+        this.runtimeRefreshNotifier = runtimeRefreshNotifier;
     }
 
     @PostMapping("/sync")
@@ -58,7 +64,9 @@ public class WhatsappBridgeConfigController {
     @PostMapping("/groups")
     public ResponseEntity<?> addGroup(@RequestBody WhatsappBridgeGroupRequest request) {
         try {
-            return ResponseEntity.ok(service.addOrEnableGroup(request));
+            WhatsappBridgeGroup saved = service.addOrEnableGroup(request);
+            runtimeRefreshNotifier.refreshNowBestEffort();
+            return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(error.getMessage());
         }
@@ -70,7 +78,9 @@ public class WhatsappBridgeConfigController {
             @RequestParam boolean value
     ) {
         try {
-            return ResponseEntity.ok(service.setGroupEnabled(id, value));
+            WhatsappBridgeGroup saved = service.setGroupEnabled(id, value);
+            runtimeRefreshNotifier.refreshNowBestEffort();
+            return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(error.getMessage());
         }
@@ -82,7 +92,9 @@ public class WhatsappBridgeConfigController {
             @RequestParam String value
     ) {
         try {
-            return ResponseEntity.ok(service.setGroupFlowType(id, value));
+            WhatsappBridgeGroup saved = service.setGroupFlowType(id, value);
+            runtimeRefreshNotifier.refreshNowBestEffort();
+            return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(error.getMessage());
         }
@@ -91,7 +103,9 @@ public class WhatsappBridgeConfigController {
     @DeleteMapping("/groups/{id}")
     public ResponseEntity<?> removeGroup(@PathVariable Long id) {
         try {
-            return ResponseEntity.ok(service.removeGroupAndStatistics(id));
+            WhatsappBridgeGroup saved = service.removeGroupAndStatistics(id);
+            runtimeRefreshNotifier.refreshNowBestEffort();
+            return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(error.getMessage());
         }
@@ -110,7 +124,9 @@ public class WhatsappBridgeConfigController {
             @RequestBody WhatsappBridgeBlockedPhoneRequest request
     ) {
         try {
-            return ResponseEntity.ok(service.blockPhone(request));
+            WhatsappBridgeBlockedPhone saved = service.blockPhone(request);
+            runtimeRefreshNotifier.refreshNowBestEffort();
+            return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(error.getMessage());
         }
@@ -120,6 +136,7 @@ public class WhatsappBridgeConfigController {
     public ResponseEntity<?> unblockPhone(@PathVariable Long id) {
         try {
             service.unblockPhone(id);
+            runtimeRefreshNotifier.refreshNowBestEffort();
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException error) {
             return ResponseEntity.badRequest().body(error.getMessage());
