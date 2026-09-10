@@ -30,15 +30,18 @@ public class WhatsappGroupStatService {
     private final WhatsappGroupDailyStatRepository groupRepository;
     private final WhatsappGroupUserDailyStatRepository userRepository;
     private final WhatsappStatContactRepository contactRepository;
+    private final WhatsappBridgeConfigService bridgeConfigService;
 
     public WhatsappGroupStatService(
             WhatsappGroupDailyStatRepository groupRepository,
             WhatsappGroupUserDailyStatRepository userRepository,
-            WhatsappStatContactRepository contactRepository
+            WhatsappStatContactRepository contactRepository,
+            WhatsappBridgeConfigService bridgeConfigService
     ) {
         this.groupRepository = groupRepository;
         this.userRepository = userRepository;
         this.contactRepository = contactRepository;
+        this.bridgeConfigService = bridgeConfigService;
     }
 
     /*
@@ -127,19 +130,29 @@ public class WhatsappGroupStatService {
         return toContactResponse(saved);
     }
 
-    @Transactional(readOnly = true)
     public List<UserMessageStatResponse> enrichProjectionRows(
             List<UserMessageStatProjection> rows
+    ) {
+        return enrichProjectionRows(rows, null);
+    }
+
+    public List<UserMessageStatResponse> enrichProjectionRows(
+            List<UserMessageStatProjection> rows,
+            String instanceName
     ) {
         if (rows == null || rows.isEmpty()) {
             return List.of();
         }
 
+        List<String> phones =
+                rows.stream()
+                        .map(UserMessageStatProjection::getPhone)
+                        .collect(Collectors.toList());
+
         Map<String, WhatsappStatContact> contacts =
-                loadContacts(
-                        rows.stream()
-                                .map(UserMessageStatProjection::getPhone)
-                                .collect(Collectors.toList())
+                loadAndBackfillContacts(
+                        instanceName,
+                        phones
                 );
 
         return rows.stream()
@@ -153,19 +166,29 @@ public class WhatsappGroupStatService {
                 .collect(Collectors.toList());
     }
 
-    @Transactional(readOnly = true)
     public List<UserMessageStatResponse> enrichDailyRows(
             List<WhatsappGroupUserDailyStat> rows
+    ) {
+        return enrichDailyRows(rows, null);
+    }
+
+    public List<UserMessageStatResponse> enrichDailyRows(
+            List<WhatsappGroupUserDailyStat> rows,
+            String instanceName
     ) {
         if (rows == null || rows.isEmpty()) {
             return List.of();
         }
 
+        List<String> phones =
+                rows.stream()
+                        .map(WhatsappGroupUserDailyStat::getPhone)
+                        .collect(Collectors.toList());
+
         Map<String, WhatsappStatContact> contacts =
-                loadContacts(
-                        rows.stream()
-                                .map(WhatsappGroupUserDailyStat::getPhone)
-                                .collect(Collectors.toList())
+                loadAndBackfillContacts(
+                        instanceName,
+                        phones
                 );
 
         return rows.stream()
@@ -177,6 +200,61 @@ public class WhatsappGroupStatService {
                         )
                 )
                 .collect(Collectors.toList());
+    }
+
+    private Map<String, WhatsappStatContact> loadAndBackfillContacts(
+            String instanceName,
+            Collection<String> phones
+    ) {
+        Map<String, WhatsappStatContact> contacts =
+                loadContacts(phones);
+
+        if (
+                instanceName == null ||
+                instanceName.isBlank() ||
+                phones == null ||
+                phones.isEmpty()
+        ) {
+            return contacts;
+        }
+
+        List<String> missingWhatsappNames =
+                phones.stream()
+                        .filter(phone -> {
+                            WhatsappStatContact contact =
+                                    contacts.get(phone);
+
+                            return contact == null ||
+                                    blankToNull(
+                                            contact.getWhatsappName()
+                                    ) == null;
+                        })
+                        .distinct()
+                        .collect(Collectors.toList());
+
+        if (missingWhatsappNames.isEmpty()) {
+            return contacts;
+        }
+
+        Map<String, String> resolved =
+                bridgeConfigService.resolveWhatsappPushNames(
+                        instanceName.trim(),
+                        missingWhatsappNames
+                );
+
+        if (resolved.isEmpty()) {
+            return contacts;
+        }
+
+        resolved.forEach(
+                (phone, whatsappName) ->
+                        contactRepository.upsertWhatsappName(
+                                phone,
+                                whatsappName
+                        )
+        );
+
+        return loadContacts(phones);
     }
 
     private Map<String, WhatsappStatContact> loadContacts(

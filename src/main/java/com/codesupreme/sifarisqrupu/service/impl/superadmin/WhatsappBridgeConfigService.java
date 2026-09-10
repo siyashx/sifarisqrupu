@@ -26,10 +26,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class WhatsappBridgeConfigService {
@@ -47,6 +51,8 @@ public class WhatsappBridgeConfigService {
     private final HttpClient httpClient;
     private final String evolutionApiBase;
     private final String evolutionApiKey;
+    private final Map<String, Long> whatsappProfileMissUntil =
+            new ConcurrentHashMap<>();
 
     public WhatsappBridgeConfigService(
             WhatsappBridgeInstanceRepository instanceRepository,
@@ -513,6 +519,354 @@ public class WhatsappBridgeConfigService {
             if (!text.isBlank()) return text;
         }
         return "";
+    }
+
+    /*
+     * Admin statistikası üçün əvvəldən DB-də olan nömrələrin WhatsApp profil
+     * adlarını lazy backfill edir. Burada yalnız pushName/notify/verifiedName
+     * istifadə olunur; instance sahibinin saved contact adı istifadə edilmir.
+     *
+     * Bir ekran açılışında bütün çatışmayan nömrələr üçün Evolution-a maksimum
+     * iki sorğu gedir: findContacts + ehtiyac qalarsa findChats.
+     */
+    public Map<String, String> resolveWhatsappPushNames(
+            String instanceName,
+            Collection<String> rawPhones
+    ) {
+        String normalizedInstance = clean(instanceName);
+
+        if (
+                normalizedInstance.isBlank() ||
+                rawPhones == null ||
+                rawPhones.isEmpty() ||
+                evolutionApiBase.isBlank() ||
+                evolutionApiKey.isBlank()
+        ) {
+            return Map.of();
+        }
+
+        long now = System.currentTimeMillis();
+        Set<String> phones = new LinkedHashSet<>();
+
+        for (String rawPhone : rawPhones) {
+            String phone = normalizePhone(rawPhone);
+            if (phone.length() < 8 || phone.length() > 15) {
+                continue;
+            }
+
+            Long missUntil =
+                    whatsappProfileMissUntil.get(
+                            normalizedInstance + ":" + phone
+                    );
+
+            if (missUntil != null && missUntil > now) {
+                continue;
+            }
+
+            phones.add(phone);
+        }
+
+        if (phones.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, String> resolved =
+                new LinkedHashMap<>();
+
+        try {
+            JsonNode contacts = fetchEvolutionChatCollection(
+                    normalizedInstance,
+                    "findContacts"
+            );
+
+            collectWhatsappPushNames(
+                    contacts,
+                    phones,
+                    resolved
+            );
+        } catch (Exception ignored) {
+            // findChats fallback aşağıda qalır.
+        }
+
+        if (resolved.size() < phones.size()) {
+            try {
+                JsonNode chats = fetchEvolutionChatCollection(
+                        normalizedInstance,
+                        "findChats"
+                );
+
+                collectWhatsappPushNames(
+                        chats,
+                        phones,
+                        resolved
+                );
+            } catch (Exception ignored) {
+                // Ad tapılmaması statistikanın özünü bloklamamalıdır.
+            }
+        }
+
+        long missExpiry =
+                System.currentTimeMillis() + 60_000L;
+
+        for (String phone : phones) {
+            String key =
+                    normalizedInstance + ":" + phone;
+
+            if (resolved.containsKey(phone)) {
+                whatsappProfileMissUntil.remove(key);
+            } else {
+                whatsappProfileMissUntil.put(
+                        key,
+                        missExpiry
+                );
+            }
+        }
+
+        return resolved;
+    }
+
+    private JsonNode fetchEvolutionChatCollection(
+            String instanceName,
+            String operation
+    ) throws Exception {
+        String encodedInstance = URLEncoder
+                .encode(instanceName, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+        URI uri = URI.create(
+                evolutionApiBase
+                        + "/chat/"
+                        + operation
+                        + "/"
+                        + encodedInstance
+        );
+
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(Duration.ofSeconds(5))
+                .header("apikey", evolutionApiKey)
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        "{\"where\":{}}",
+                        StandardCharsets.UTF_8
+                ))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(
+                request,
+                HttpResponse.BodyHandlers.ofString(
+                        StandardCharsets.UTF_8
+                )
+        );
+
+        if (
+                response.statusCode() < 200 ||
+                response.statusCode() >= 300
+        ) {
+            throw new IllegalStateException(
+                    "Evolution "
+                            + operation
+                            + " HTTP "
+                            + response.statusCode()
+            );
+        }
+
+        JsonNode root =
+                objectMapper.readTree(response.body());
+
+        return extractContactLikeArray(root);
+    }
+
+    private JsonNode extractContactLikeArray(
+            JsonNode root
+    ) {
+        if (root == null || root.isNull()) {
+            return null;
+        }
+
+        if (root.isArray()) {
+            return root;
+        }
+
+        for (String field : List.of(
+                "contacts",
+                "chats",
+                "data",
+                "records",
+                "result",
+                "response"
+        )) {
+            JsonNode value = root.get(field);
+
+            if (value == null || value.isNull()) {
+                continue;
+            }
+
+            if (value.isArray()) {
+                return value;
+            }
+
+            if (value.isObject()) {
+                for (String nested : List.of(
+                        "contacts",
+                        "chats",
+                        "records",
+                        "result"
+                )) {
+                    JsonNode nestedValue =
+                            value.get(nested);
+
+                    if (
+                            nestedValue != null &&
+                            nestedValue.isArray()
+                    ) {
+                        return nestedValue;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private void collectWhatsappPushNames(
+            JsonNode array,
+            Set<String> wantedPhones,
+            Map<String, String> target
+    ) {
+        if (array == null || !array.isArray()) {
+            return;
+        }
+
+        for (JsonNode node : array) {
+            String matchedPhone =
+                    matchContactPhone(
+                            node,
+                            wantedPhones
+                    );
+
+            if (
+                    matchedPhone.isBlank() ||
+                    target.containsKey(matchedPhone)
+            ) {
+                continue;
+            }
+
+            String pushName = cleanWhatsappProfileName(
+                    firstText(
+                            node,
+                            "pushName",
+                            "notify",
+                            "verifiedName"
+                    ),
+                    matchedPhone
+            );
+
+            if (pushName.isBlank()) {
+                JsonNode lastMessage =
+                        node.get("lastMessage");
+
+                pushName = cleanWhatsappProfileName(
+                        firstText(
+                                lastMessage,
+                                "pushName",
+                                "notify",
+                                "verifiedName"
+                        ),
+                        matchedPhone
+                );
+            }
+
+            if (!pushName.isBlank()) {
+                target.put(
+                        matchedPhone,
+                        pushName
+                );
+            }
+        }
+    }
+
+    private String matchContactPhone(
+            JsonNode node,
+            Set<String> wantedPhones
+    ) {
+        if (node == null || wantedPhones.isEmpty()) {
+            return "";
+        }
+
+        for (String field : List.of(
+                "remoteJid",
+                "remoteJidAlt",
+                "jid",
+                "number",
+                "phoneNumber",
+                "owner"
+        )) {
+            String value = firstText(node, field);
+            if (value.isBlank()) {
+                continue;
+            }
+
+            String phone = normalizeContactIdentifier(value);
+            if (wantedPhones.contains(phone)) {
+                return phone;
+            }
+        }
+
+        return "";
+    }
+
+    private String normalizeContactIdentifier(
+            String value
+    ) {
+        String raw = clean(value);
+
+        if (raw.endsWith("@lid") || raw.endsWith("@g.us")) {
+            return "";
+        }
+
+        int atIndex = raw.indexOf('@');
+        if (atIndex > 0) {
+            raw = raw.substring(0, atIndex);
+        }
+
+        int deviceIndex = raw.indexOf(':');
+        if (deviceIndex > 0) {
+            raw = raw.substring(0, deviceIndex);
+        }
+
+        return raw.replaceAll("\\D", "");
+    }
+
+    private String cleanWhatsappProfileName(
+            String value,
+            String phone
+    ) {
+        String name = clean(value)
+                .replaceAll("\\s+", " ");
+
+        if (
+                name.isBlank() ||
+                name.endsWith("@s.whatsapp.net") ||
+                name.endsWith("@lid") ||
+                name.endsWith("@g.us")
+        ) {
+            return "";
+        }
+
+        String nameDigits =
+                name.replaceAll("\\D", "");
+
+        if (
+                !phone.isBlank() &&
+                phone.equals(nameDigits)
+        ) {
+            return "";
+        }
+
+        return name.length() > 255
+                ? name.substring(0, 255)
+                : name;
     }
 
     public List<WhatsappBridgeInstance> getInstances() {

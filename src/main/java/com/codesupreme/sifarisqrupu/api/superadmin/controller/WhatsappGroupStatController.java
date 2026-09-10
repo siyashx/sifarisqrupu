@@ -197,7 +197,10 @@ public class WhatsappGroupStatController {
                         );
 
         return ResponseEntity.ok(
-                service.enrichProjectionRows(rows)
+                service.enrichProjectionRows(
+                        rows,
+                        instanceName.trim()
+                )
         );
     }
 
@@ -270,7 +273,10 @@ public class WhatsappGroupStatController {
                         );
 
         return ResponseEntity.ok(
-                service.enrichDailyRows(rows)
+                service.enrichDailyRows(
+                        rows,
+                        instanceName.trim()
+                )
         );
     }
 
