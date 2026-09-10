@@ -5,11 +5,9 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public class UserMessageStatResponse {
-
+public class WhatsappContactNameResponse {
     private String phone;
     private String whatsappName;
     private String customName;
     private String displayName;
-    private long messageCount;
 }

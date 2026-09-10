@@ -14,4 +14,10 @@ public class GroupStatIncrementRequest {
      * Nömrə müəyyən edilməyibsə null ola bilər.
      */
     private String phone;
+
+    /*
+     * Mesajın WhatsApp profil adı (pushName).
+     * Yalnız göstərim üçündür; telefon identifikasiyası üçün istifadə edilmir.
+     */
+    private String whatsappName;
 }

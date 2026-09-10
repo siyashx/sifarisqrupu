@@ -7,6 +7,7 @@ import com.codesupreme.sifarisqrupu.dao.superadmin.WhatsappGroupUserDailyStatRep
 import com.codesupreme.sifarisqrupu.dto.superadmin.GroupOrderStatResponse;
 import com.codesupreme.sifarisqrupu.dto.superadmin.GroupStatIncrementRequest;
 import com.codesupreme.sifarisqrupu.dto.superadmin.UserMessageStatResponse;
+import com.codesupreme.sifarisqrupu.dto.superadmin.WhatsappContactNameUpdateRequest;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappGroupDailyStat;
 import com.codesupreme.sifarisqrupu.model.superadmin.WhatsappGroupUserDailyStat;
 import com.codesupreme.sifarisqrupu.service.impl.superadmin.WhatsappGroupStatService;
@@ -196,7 +197,7 @@ public class WhatsappGroupStatController {
                         );
 
         return ResponseEntity.ok(
-                toUserResponse(rows)
+                service.enrichProjectionRows(rows)
         );
     }
 
@@ -225,7 +226,7 @@ public class WhatsappGroupStatController {
                         );
 
         return ResponseEntity.ok(
-                toUserResponse(rows)
+                service.enrichProjectionRows(rows)
         );
     }
 
@@ -268,19 +269,9 @@ public class WhatsappGroupStatController {
                                 groupJid.trim()
                         );
 
-        List<UserMessageStatResponse> response =
-                rows.stream()
-                        .map(row ->
-                                new UserMessageStatResponse(
-                                        row.getPhone(),
-                                        safeLong(
-                                                row.getMessageCount()
-                                        )
-                                )
-                        )
-                        .collect(Collectors.toList());
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                service.enrichDailyRows(rows)
+        );
     }
 
     /*
@@ -300,35 +291,32 @@ public class WhatsappGroupStatController {
                                 today
                         );
 
-        List<UserMessageStatResponse> response =
-                rows.stream()
-                        .map(row ->
-                                new UserMessageStatResponse(
-                                        row.getPhone(),
-                                        safeLong(
-                                                row.getMessageCount()
-                                        )
-                                )
-                        )
-                        .collect(Collectors.toList());
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(
+                service.enrichProjectionRows(rows)
+        );
     }
 
-    private List<UserMessageStatResponse>
-    toUserResponse(
-            List<UserMessageStatProjection> rows
+    /*
+     * Adminin verdiyi ad telefon nömrəsinə qlobal bağlanır.
+     * Boş name göndərilərsə custom ad silinir və WhatsApp adı fallback olur.
+     */
+    @PutMapping("/contacts/{phone}/name")
+    public ResponseEntity<?> updateContactName(
+            @PathVariable String phone,
+            @RequestBody(required = false) WhatsappContactNameUpdateRequest request
     ) {
-        return rows.stream()
-                .map(row ->
-                        new UserMessageStatResponse(
-                                row.getPhone(),
-                                safeLong(
-                                        row.getMessageCount()
-                                )
-                        )
-                )
-                .collect(Collectors.toList());
+        try {
+            String name = request == null
+                    ? null
+                    : request.getName();
+
+            return ResponseEntity.ok(
+                    service.updateCustomName(phone, name)
+            );
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest()
+                    .body(error.getMessage());
+        }
     }
 
     private ResponseEntity<String>
