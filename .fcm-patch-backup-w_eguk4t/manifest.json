@@ -1,0 +1,11 @@
+{
+  "root": "/Users/siyashx/IdeaProjects/sifarisqrupu",
+  "project": "backend",
+  "files": [
+    {
+      "path": "src/main/resources/application.properties",
+      "before": "29f2f0526a9adb0946c7b30f40fcf31da47b244388b07a4c58adfd4cc4bb5442",
+      "after": "05293ce06fd34ee64345c366c04d304a620bcaf78a8d89d856ca116ddae1cf7f"
+    }
+  ]
+}

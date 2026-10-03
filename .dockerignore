@@ -1,0 +1,4 @@
+
+# Firebase server credentials are mounted at runtime.
+*firebase-adminsdk*.json
+secrets/
