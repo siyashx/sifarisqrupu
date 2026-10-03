@@ -21,6 +21,7 @@ public class MotoTaxiCourierPushService {
     private static final Logger log = LoggerFactory.getLogger(MotoTaxiCourierPushService.class);
     private static final String EXTERNAL_ID_PREFIX = "elehber_user_";
 
+    private final com.codesupreme.sifarisqrupu.push.FcmPushService fcm;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final String appId;
@@ -30,6 +31,7 @@ public class MotoTaxiCourierPushService {
 
     public MotoTaxiCourierPushService(
             ObjectMapper objectMapper,
+            com.codesupreme.sifarisqrupu.push.FcmPushService fcm,
             @Value("${mototaxi.onesignal.app-id:}") String appId,
             @Value("${mototaxi.onesignal.rest-api-key:}") String restApiKey,
             @Value("${mototaxi.onesignal.android-channel-id:c668a935-ea3e-450d-afa4-5853169c36cf}") String androidChannelId,
@@ -37,6 +39,7 @@ public class MotoTaxiCourierPushService {
     ) {
         this.restClient = RestClient.builder().baseUrl("https://api.onesignal.com").build();
         this.objectMapper = objectMapper;
+        this.fcm = fcm;
         this.appId = clean(appId);
         this.restApiKey = clean(restApiKey);
         this.androidChannelId = clean(androidChannelId);
@@ -134,6 +137,17 @@ public class MotoTaxiCourierPushService {
             Map<String, Object> basePayload,
             String event
     ) {
+        if (fcm.isEnabled()) {
+            @SuppressWarnings("unchecked")
+            Map<String,Object> data = (Map<String,Object>) basePayload.get("data");
+            @SuppressWarnings("unchecked")
+            Map<String,String> titles = (Map<String,String>) basePayload.getOrDefault("headings", Map.of());
+            @SuppressWarnings("unchecked")
+            Map<String,String> bodies = (Map<String,String>) basePayload.getOrDefault("contents", Map.of());
+            fcm.enqueue("ELEHBER", List.of(courierId), titles.getOrDefault("en", ""), bodies.getOrDefault("en", ""),
+                data, ((Number)basePayload.getOrDefault("ttl",60)).intValue(), null);
+            return;
+        }
         String subscriptionId = clean(pushSubscriptionId);
 
         if (!subscriptionId.isBlank()) {
