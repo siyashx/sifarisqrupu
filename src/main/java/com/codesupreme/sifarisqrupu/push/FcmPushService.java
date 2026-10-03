@@ -7,6 +7,7 @@ import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.messaging.*;
 import com.codesupreme.sifarisqrupu.dao.user.UserRepository;
+import com.codesupreme.sifarisqrupu.dao.admin.AdminRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,7 @@ public class FcmPushService {
     private final PushDeviceRepository devices;
     private final PushDeliveryRepository deliveries;
     private final UserRepository users;
+    private final AdminRepository admins;
     private final ObjectMapper json;
     private final boolean enabled;
     private final String projectId;
@@ -40,10 +42,10 @@ public class FcmPushService {
         }
     }
 
-    public FcmPushService(PushDeviceRepository devices, PushDeliveryRepository deliveries, UserRepository users,
+    public FcmPushService(PushDeviceRepository devices, PushDeliveryRepository deliveries, UserRepository users, AdminRepository admins,
         ObjectMapper json, PushDeliveryPolicy policy, @Value("${push.fcm.enabled:false}") boolean enabled,
         @Value("${push.fcm.project-id:bakuappcraft-notifications}") String projectId) {
-        this.devices=devices; this.deliveries=deliveries; this.users=users; this.json=json;
+        this.devices=devices; this.deliveries=deliveries; this.users=users; this.admins=admins; this.json=json;
         this.policy=policy; this.enabled=enabled; this.projectId=projectId;
     }
     public boolean isEnabled() { return enabled; }
@@ -63,7 +65,7 @@ public class FcmPushService {
     public synchronized int enqueue(String appCode, Collection<Long> userIds, String title, String body,
             Map<String,?> data, int ttlSeconds, String eventId) {
         if(!enabled || userIds.isEmpty()) return 0;
-        app(appCode);
+        if (!"ADMIN".equals(appCode)) app(appCode);
         long now=System.currentTimeMillis();
         int ttl=Math.max(1,Math.min(86400,ttlSeconds));
         String id=eventId==null ? UUID.randomUUID().toString() : eventId;
@@ -84,7 +86,7 @@ public class FcmPushService {
             PushDelivery item=new PushDelivery();
             item.setEventId(id); item.setDeviceId(device.getId()); item.setUserId(device.getUserId()); item.setAppCode(appCode);
             Map<String,String> targeted=new LinkedHashMap<>(values);
-            targeted.put("recipientUserId",device.getUserId().toString());
+            targeted.put("ADMIN".equals(appCode) ? "recipientAdminId" : "recipientUserId",device.getUserId().toString());
             try { item.setPayload(json.writeValueAsString(targeted)); } catch(Exception e) {throw new IllegalArgumentException("Invalid target payload");} item.setExpiresAt(now+ttl*1000L); item.setNextAttemptAt(now); item.setState("PENDING");
             deliveries.save(item); queued++;
         }
@@ -101,7 +103,9 @@ public class FcmPushService {
     private void deliverOne(PushDelivery delivery) {
             long now=System.currentTimeMillis();
             PushDevice device=devices.findById(delivery.getDeviceId()).orElse(null);
-            boolean userActive=users.findById(delivery.getUserId()).map(u->!Boolean.TRUE.equals(u.getIsDisable())).orElse(false);
+            boolean userActive="ADMIN".equals(delivery.getAppCode())
+                ? admins.findById(delivery.getUserId()).map(a->!Boolean.TRUE.equals(a.getIsDisable()) && !Boolean.TRUE.equals(a.getIsMutedNotifications())).orElse(false)
+                : users.findById(delivery.getUserId()).map(u->!Boolean.TRUE.equals(u.getIsDisable())).orElse(false);
             if(delivery.getExpiresAt()<=now || device==null || !device.isEnabled() || !userActive ||
                 !Objects.equals(device.getUserId(),delivery.getUserId()) || !Objects.equals(device.getAppCode(),delivery.getAppCode())) {
                 delivery.setState("EXPIRED"); deliveries.save(delivery); return;
@@ -115,7 +119,7 @@ public class FcmPushService {
                 Message.Builder message=Message.builder().setToken(device.getToken()).putAllData(data)
                     .setAndroidConfig(AndroidConfig.builder().setPriority(AndroidConfig.Priority.HIGH)
                         .setTtl(remaining).setRestrictedPackageName("ZAKAZ".equals(device.getAppCode()) ?
-                            "com.bakuappcraft.zakazqrupu" : "com.bakuappcraft.elehber").build());
+                            "com.bakuappcraft.zakazqrupu" : "ADMIN".equals(device.getAppCode()) ? "com.biglikuryer.sifarisqrupuadmin" : "com.bakuappcraft.elehber").build());
                 if("ios".equals(device.getPlatform())) {
                     Aps.Builder aps=Aps.builder().setContentAvailable(true);
                     if(!data.getOrDefault("title", "").isBlank()) {

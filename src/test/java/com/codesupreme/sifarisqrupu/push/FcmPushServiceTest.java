@@ -21,7 +21,7 @@ class FcmPushServiceTest {
     @BeforeEach void setup() {
         devices=mock(PushDeviceRepository.class);deliveries=mock(PushDeliveryRepository.class);users=mock(UserRepository.class);
         policy=mock(PushDeliveryPolicy.class);messaging=mock(FirebaseMessaging.class);
-        service=new FcmPushService(devices,deliveries,users,new ObjectMapper(),policy,true,"test-project");
+        service=new FcmPushService(devices,deliveries,users,mock(com.codesupreme.sifarisqrupu.dao.admin.AdminRepository.class),new ObjectMapper(),policy,true,"test-project");
         ReflectionTestUtils.setField(service,"messaging",messaging);
         device=new PushDevice();device.setId(10L);device.setUserId(7L);device.setAppCode("ELEHBER");device.setEnabled(true);
         device.setToken("test-device-token");device.setPlatform("android");
@@ -51,7 +51,7 @@ class FcmPushServiceTest {
         verify(deliveries,never()).save(any());
     }
     @Test void disabledProviderDoesNotSendOrQueue() {
-        var off=new FcmPushService(devices,deliveries,users,new ObjectMapper(),policy,false,"test");
+        var off=new FcmPushService(devices,deliveries,users,mock(com.codesupreme.sifarisqrupu.dao.admin.AdminRepository.class),new ObjectMapper(),policy,false,"test");
         assertEquals(0,off.enqueue("ELEHBER",List.of(7L),"T","B",Map.of(),60,null));off.deliverDue();
         verifyNoInteractions(messaging,deliveries);
     }
@@ -97,5 +97,21 @@ class FcmPushServiceTest {
         service.enqueue("ZAKAZ",List.of(7L),"T","B",Map.of(),60,null);
         verify(devices).findByAppCodeAndUserIdInAndEnabledTrue("ZAKAZ",List.of(7L));
         verify(deliveries,never()).save(any());
+    }
+    @Test void adminQueueUsesAdminIdentityAndPackageWithoutCourierAccount() throws Exception {
+        var admins=mock(com.codesupreme.sifarisqrupu.dao.admin.AdminRepository.class);
+        ReflectionTestUtils.setField(service,"admins",admins);
+        device.setAppCode("ADMIN");device.setUserId(1L);
+        when(admins.findById(1L)).thenReturn(Optional.of(com.codesupreme.sifarisqrupu.model.admin.Admin.builder().id(1L).build()));
+        when(devices.findByAppCodeAndUserIdInAndEnabledTrue(eq("ADMIN"),any())).thenReturn(List.of(device));
+        service.enqueue("ADMIN",List.of(1L),"Request","New documents",Map.of("courierId",9),60,"admin-event");
+        var saved=org.mockito.ArgumentCaptor.forClass(PushDelivery.class);verify(deliveries).save(saved.capture());
+        var item=saved.getValue();var data=new ObjectMapper().readTree(item.getPayload());
+        assertEquals("1",data.get("recipientAdminId").asText());assertFalse(data.has("recipientUserId"));
+        when(deliveries.findTop100ByStateAndNextAttemptAtLessThanEqualOrderByIdAsc(eq("PENDING"),anyLong())).thenReturn(List.of(item));
+        service.deliverDue();assertEquals("SENT",item.getState());verify(users,never()).findById(1L);
+        var message=org.mockito.ArgumentCaptor.forClass(Message.class);verify(messaging).send(message.capture());
+        Object android=ReflectionTestUtils.getField(message.getValue(),"androidConfig");
+        assertEquals("com.biglikuryer.sifarisqrupuadmin",ReflectionTestUtils.getField(android,"restrictedPackageName"));
     }
 }

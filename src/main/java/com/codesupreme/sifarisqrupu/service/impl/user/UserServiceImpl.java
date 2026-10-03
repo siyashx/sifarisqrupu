@@ -17,10 +17,12 @@ public class UserServiceImpl implements UserServiceInter {
 
     private final UserRepository userRepository;
     private final ModelMapper modelMapper;
+    private final com.codesupreme.sifarisqrupu.push.AdminVerificationPushService adminPush;
 
-    public UserServiceImpl(UserRepository userRepository, ModelMapper modelMapper) {
+    public UserServiceImpl(UserRepository userRepository, ModelMapper modelMapper, com.codesupreme.sifarisqrupu.push.AdminVerificationPushService adminPush) {
         this.userRepository = userRepository;
         this.modelMapper = modelMapper;
+        this.adminPush = adminPush;
     }
 
     @Override
@@ -62,6 +64,8 @@ public class UserServiceImpl implements UserServiceInter {
         Optional<User> userOptional = userRepository.findById(id);
         if (userOptional.isPresent()) {
             User user = userOptional.get();
+            boolean documentsChanged = userDto.getIdentifyPhoto()!=null && !java.util.Objects.equals(user.getIdentifyPhoto(),userDto.getIdentifyPhoto());
+            boolean enteringReview = "active".equals(userDto.getCourierStatus()) && !"active".equals(user.getCourierStatus());
 
             if (userDto.getOneSignal() != null) {
                 user.setOneSignal(userDto.getOneSignal());
@@ -206,6 +210,7 @@ public class UserServiceImpl implements UserServiceInter {
             }
 
             user = userRepository.save(user);
+            if (documentsChanged || enteringReview) adminPush.notifyAdmin(user.getId());
             return modelMapper.map(user, UserDto.class);
 
 
