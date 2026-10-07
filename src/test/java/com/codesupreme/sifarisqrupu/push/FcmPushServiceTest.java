@@ -78,6 +78,33 @@ class FcmPushServiceTest {
         when(messaging.send(any(Message.class))).thenThrow(error);
         service.deliverDue();assertEquals("PENDING",d.getState());assertEquals(1,d.getAttempts());assertTrue(d.getNextAttemptAt()>System.currentTimeMillis());
     }
+    @Test void iosFailureLogIdentifiesDeviceAndReasonWithoutPrivateData() throws Exception {
+        var logger=(ch.qos.logback.classic.Logger)org.slf4j.LoggerFactory.getLogger(FcmPushService.class);
+        var appender=new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();logger.addAppender(appender);
+        try {
+            device.setPlatform("ios");
+            var d=pending();d.setPayload("{\"title\":\"Private title\",\"body\":\"Private message\"}");
+            var error=mock(FirebaseMessagingException.class);
+            when(error.getMessagingErrorCode()).thenReturn(MessagingErrorCode.INVALID_ARGUMENT);
+            when(error.getMessage()).thenReturn("Invalid APNs token: test-device-token; Private title; Private message\nBasic secret-auth-value");
+            var response=mock(com.google.firebase.IncomingHttpResponse.class);
+            when(error.getHttpResponse()).thenReturn(response);
+            when(response.getContent()).thenReturn("{\"error\":{\"details\":[{\"apnsError\":{\"reason\":\"BadDeviceToken\"}},{\"fieldViolations\":[{\"field\":\"message.token\",\"description\":\"Invalid test-device-token\"}]}]}}");
+            when(messaging.send(any(Message.class))).thenThrow(error);
+            service.deliverDue();
+            String message=appender.list.stream().map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
+                .filter(line->line.startsWith("FCM delivery failed.")).findFirst().orElseThrow();
+            assertTrue(message.contains("platform=ios"));assertTrue(message.contains("deviceId=10"));
+            assertTrue(message.contains("code=INVALID_ARGUMENT"));assertTrue(message.contains("Invalid APNs token"));
+            assertTrue(message.contains("apnsReason=BadDeviceToken"));assertTrue(message.contains("field=message.token"));
+            assertFalse(message.contains(device.getToken()));assertFalse(message.contains("Private title"));
+            assertFalse(message.contains("Private message"));assertFalse(message.contains("secret-auth-value"));
+            assertFalse(message.contains("\n"));assertEquals("FAILED",d.getState());assertTrue(device.isEnabled());
+        } finally {
+            logger.detachAppender(appender);appender.stop();service.close();
+        }
+    }
     @Test void invalidTokenIsDisabled() throws Exception {
         var d=pending();var error=mock(FirebaseMessagingException.class);
         when(error.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);

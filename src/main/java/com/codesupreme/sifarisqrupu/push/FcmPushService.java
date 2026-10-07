@@ -152,9 +152,56 @@ public class FcmPushService {
                     delivery.setNextAttemptAt(now+delay);
                     if(delivery.getAttempts()>=8) delivery.setState("FAILED");
                 }
-                log.warn("FCM delivery failed. deliveryId={}, code={}, state={}",delivery.getId(),delivery.getLastError(),delivery.getState());
+                log.warn("FCM delivery failed. deliveryId={}, app={}, platform={}, deviceId={}, code={}, state={}, reason={}",
+                    delivery.getId(),delivery.getAppCode(),device.getPlatform(),device.getId(),
+                    delivery.getLastError(),delivery.getState(),safeFailureReason(error,device,delivery));
             }
             deliveries.save(delivery);
+    }
+
+    private String safeFailureReason(Exception error, PushDevice device, PushDelivery delivery) {
+        // SDK messages distinguish invalid tokens, package names and payloads.
+        // Never log request/response objects, tokens, credentials or message text.
+        if (!(error instanceof FirebaseMessagingException)) return error.getClass().getSimpleName();
+        String reason=Objects.toString(error.getMessage(),"No Firebase error description");
+        var response=((FirebaseMessagingException)error).getHttpResponse();
+        if(response!=null && response.getContent()!=null) {
+            try {
+                // The top-level message can be generic; APNs/field details
+                // identify the actual rejection without dumping the response.
+                var details=json.readTree(response.getContent()).path("error").path("details");
+                for(var detail:details) {
+                    String apnsReason=detail.path("apnsError").path("reason").asText("");
+                    if(!apnsReason.isBlank()) reason+="; apnsReason="+apnsReason;
+                    for(var violation:detail.path("fieldViolations")) {
+                        reason+="; field="+violation.path("field").asText("")
+                            +": "+violation.path("description").asText("");
+                    }
+                }
+            } catch(Exception ignored) {
+                // Keep the SDK description when structured details are absent.
+            }
+        }
+        if(device.getToken()!=null && !device.getToken().isBlank()) {
+            reason=reason.replace(device.getToken(),"[token]");
+        }
+        try {
+            Map<String,String> payload=json.readValue(delivery.getPayload(),new TypeReference<Map<String,String>>(){});
+            List<String> privateValues=new ArrayList<>(payload.values());
+            privateValues.removeIf(value->value==null || value.isBlank());
+            privateValues.sort(Comparator.comparingInt(String::length).reversed());
+            for(String value:privateValues) {
+                String escaped=json.writeValueAsString(value);
+                reason=reason.replace(escaped.substring(1,escaped.length()-1),"[payload]")
+                    .replace(value,"[payload]");
+            }
+        } catch(Exception ignored) {
+            return "Firebase error description omitted: payload could not be redacted";
+        }
+        return reason.replaceAll("(?i)(Bearer|Basic)\\s+\\S+","[credential]")
+            .replaceAll("[A-Za-z0-9_:/+=-]{40,}","[redacted]")
+            .replaceAll("[\\p{Cntrl}\\u2028\\u2029]"," ")
+            .codePoints().limit(600).collect(StringBuilder::new,StringBuilder::appendCodePoint,StringBuilder::append).toString();
     }
     @Scheduled(fixedDelay=86400000L,scheduler="pushTaskScheduler") @Transactional
     public void cleanup() { deliveries.deleteByExpiresAtLessThan(System.currentTimeMillis()-7*86400000L); }
