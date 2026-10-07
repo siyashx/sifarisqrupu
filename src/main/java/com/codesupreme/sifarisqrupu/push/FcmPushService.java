@@ -123,7 +123,7 @@ public class FcmPushService {
                 if("ios".equals(device.getPlatform())) {
                     Aps.Builder aps=Aps.builder().setContentAvailable(true);
                     if(!data.getOrDefault("title", "").isBlank()) {
-                        aps.setAlert(ApsAlert.builder().setTitle(data.get("title")).setBody(data.get("body")).build()).setSound("default");
+                        aps.setAlert(ApsAlert.builder().setTitle(data.get("title")).setBody(data.get("body")).build()).setSound(iosSound(device.getAppCode(),data));
                     }
                     message.setApnsConfig(ApnsConfig.builder().setAps(aps.build())
                         .putHeader("apns-expiration", Long.toString(delivery.getExpiresAt()/1000)).build());
@@ -157,6 +157,18 @@ public class FcmPushService {
                     delivery.getLastError(),delivery.getState(),safeFailureReason(error,device,delivery));
             }
             deliveries.save(delivery);
+    }
+
+    private static String iosSound(String appCode, Map<String,String> data) {
+        // Only Zakaz bundles these sounds; preserve other apps' default sound.
+        if (!"ZAKAZ".equals(appCode)) return "default";
+        String channel=data.getOrDefault("channel",data.getOrDefault("scope","group"));
+        return switch (channel) {
+            case "group", "shop" -> "chime.caf";
+            case "moto_chat" -> "notifysound.caf";
+            default -> Set.of("mototaxi","mototaxi_chat").contains(data.getOrDefault("scope",""))
+                ? "notifysound.caf" : "chime.caf";
+        };
     }
 
     private String safeFailureReason(Exception error, PushDevice device, PushDelivery delivery) {

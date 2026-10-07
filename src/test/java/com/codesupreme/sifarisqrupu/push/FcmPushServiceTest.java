@@ -5,6 +5,8 @@ import com.codesupreme.sifarisqrupu.model.user.User;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.firebase.messaging.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.test.util.ReflectionTestUtils;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -71,6 +73,56 @@ class FcmPushServiceTest {
     @Test void successfulDeliveryIsRecorded() throws Exception {
         var d=pending();when(messaging.send(any(Message.class))).thenReturn("message-id");
         service.deliverDue();assertEquals("SENT",d.getState());verify(messaging).send(any(Message.class));
+    }
+    @ParameterizedTest
+    @CsvSource({
+        "ZAKAZ, group, mototaxi, chime.caf",
+        "ZAKAZ, shop, , chime.caf",
+        "ZAKAZ, moto_chat, , notifysound.caf",
+        "ZAKAZ, , mototaxi, notifysound.caf",
+        "ZAKAZ, , mototaxi_chat, notifysound.caf",
+        "ZAKAZ, , , chime.caf",
+        "ZAKAZ, unknown, , chime.caf",
+        "ELEHBER, moto_chat, , default"
+    })
+    void iosAlertUsesBundledSoundForItsSection(String app, String channel, String scope, String sound) throws Exception {
+        device.setAppCode(app);device.setPlatform("ios");
+        var d=pending();d.setAppCode(app);
+        Map<String,String> data=new HashMap<>(Map.of("title","Title","body","Body"));
+        if(channel!=null) data.put("channel",channel);
+        if(scope!=null) data.put("scope",scope);
+        d.setPayload(new ObjectMapper().writeValueAsString(data));
+        service.deliverDue();
+        var captor=org.mockito.ArgumentCaptor.forClass(Message.class);
+        verify(messaging).send(captor.capture());
+        Object config=ReflectionTestUtils.getField(captor.getValue(),"apnsConfig");
+        var payload=(Map<?,?>)ReflectionTestUtils.getField(config,"payload");
+        var aps=(Map<?,?>)payload.get("aps");
+        assertEquals(sound,aps.get("sound"));
+        assertEquals("Title",ReflectionTestUtils.getField(aps.get("alert"),"title"));
+        assertEquals("Body",ReflectionTestUtils.getField(aps.get("alert"),"body"));
+        assertEquals("SENT",d.getState());
+    }
+    @Test void silentIosPushDoesNotAcquireSoundOrAlert() throws Exception {
+        device.setAppCode("ZAKAZ");device.setPlatform("ios");
+        var d=pending();d.setAppCode("ZAKAZ");
+        service.deliverDue();
+        var captor=org.mockito.ArgumentCaptor.forClass(Message.class);
+        verify(messaging).send(captor.capture());
+        Object config=ReflectionTestUtils.getField(captor.getValue(),"apnsConfig");
+        var payload=(Map<?,?>)ReflectionTestUtils.getField(config,"payload");
+        var aps=(Map<?,?>)payload.get("aps");
+        assertFalse(aps.containsKey("sound"));assertFalse(aps.containsKey("alert"));
+    }
+    @Test void androidPushKeepsClientSideSoundSelection() throws Exception {
+        device.setAppCode("ZAKAZ");
+        var d=pending();d.setAppCode("ZAKAZ");
+        d.setPayload("{\"title\":\"Title\",\"body\":\"Body\",\"channel\":\"moto_chat\"}");
+        service.deliverDue();
+        var captor=org.mockito.ArgumentCaptor.forClass(Message.class);
+        verify(messaging).send(captor.capture());
+        assertNull(ReflectionTestUtils.getField(captor.getValue(),"apnsConfig"));
+        assertNull(ReflectionTestUtils.getField(captor.getValue(),"notification"));
     }
     @Test void temporaryFailureRetainsDeliveryWithBackoff() throws Exception {
         var d=pending();var error=mock(FirebaseMessagingException.class);
