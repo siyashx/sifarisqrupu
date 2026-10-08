@@ -160,7 +160,10 @@ public class FcmPushService {
     }
 
     private static String iosSound(String appCode, Map<String,String> data) {
-        // Only Zakaz bundles these sounds; preserve other apps' default sound.
+        // Mirror each Android app's channel mapping using bundled Apple sounds.
+        if ("ELEHBER".equals(appCode)) {
+            return "shop".equals(data.get("channel")) ? "chime.caf" : "notifysound.caf";
+        }
         if (!"ZAKAZ".equals(appCode)) return "default";
         String channel=data.getOrDefault("channel",data.getOrDefault("scope","group"));
         return switch (channel) {

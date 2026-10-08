@@ -83,7 +83,13 @@ class FcmPushServiceTest {
         "ZAKAZ, , mototaxi_chat, notifysound.caf",
         "ZAKAZ, , , chime.caf",
         "ZAKAZ, unknown, , chime.caf",
-        "ELEHBER, moto_chat, , default"
+        "ELEHBER, moto_chat, , notifysound.caf",
+        "ELEHBER, group, , notifysound.caf",
+        "ELEHBER, shop, , chime.caf",
+        "ELEHBER, , mototaxi, notifysound.caf",
+        "ELEHBER, , mototaxi_chat, notifysound.caf",
+        "ELEHBER, , , notifysound.caf",
+        "ELEHBER, unknown, , notifysound.caf"
     })
     void iosAlertUsesBundledSoundForItsSection(String app, String channel, String scope, String sound) throws Exception {
         device.setAppCode(app);device.setPlatform("ios");
