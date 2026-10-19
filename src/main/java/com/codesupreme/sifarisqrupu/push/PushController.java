@@ -25,7 +25,12 @@ public class PushController {
         OrderRepository orders,AdminVerificationPushService adminPush,@Value("${push.bridge-key:}") String bridgeKey) {
         this.adminPush=adminPush;this.auth=auth;this.devices=devices;this.fcm=fcm;this.audience=audience;this.orders=orders;this.bridgeKey=bridgeKey;
     }
-    public record DeviceRequest(String appCode,String installationId,String token,String platform,boolean enabled) {}
+    public record DeviceRequest(String appCode,String installationId,String token,String platform,boolean enabled,String activeRole) {
+        // Older Android/iOS releases do not send an installation-local role.
+        public DeviceRequest(String appCode,String installationId,String token,String platform,boolean enabled) {
+            this(appCode,installationId,token,platform,enabled,null);
+        }
+    }
     public record RevokeRequest(String appCode,String installationId) {}
     public record SendRequest(String appCode,String kind,String title,String body,List<Long> userIds,String requestId) {}
     public record OrderEventRequest(Long orderId,String event) {}
@@ -45,12 +50,15 @@ public class PushController {
         if(request.installationId()==null || !request.installationId().matches("[a-zA-Z0-9-]{16,64}") ||
             request.token()==null || request.token().length()<20 || request.token().length()>4096 ||
             request.platform()==null || !Set.of("android","ios").contains(request.platform())) throw new IllegalArgumentException("Invalid device registration");
+        if(request.activeRole()!=null && !Set.of("customer","courier").contains(request.activeRole()))
+            throw new IllegalArgumentException("Invalid active role");
         PushDevice device=devices.findByAppCodeAndInstallationId(app,request.installationId()).orElseGet(PushDevice::new);
         for(PushDevice other:devices.findByAppCodeAndToken(app,request.token())) {
             if(!Objects.equals(other.getId(),device.getId())) {other.setEnabled(false);devices.save(other);}
         }
         device.setAppCode(app);device.setInstallationId(request.installationId());device.setUserId(user.getId());
         device.setPlatform(request.platform());device.setToken(request.token());device.setEnabled(request.enabled());
+        device.setActiveRole("ELEHBER".equals(app) ? request.activeRole() : null);
         device.setUpdatedAt(System.currentTimeMillis());devices.save(device);
         return Map.of("registered",true,"fcmEnabled",fcm.isEnabled());
     }

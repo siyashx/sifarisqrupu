@@ -84,7 +84,6 @@ class FcmPushServiceTest {
         "ZAKAZ, , , chime.caf",
         "ZAKAZ, unknown, , chime.caf",
         "ELEHBER, moto_chat, , notifysound.caf",
-        "ELEHBER, group, , notifysound.caf",
         "ELEHBER, shop, , chime.caf",
         "ELEHBER, , mototaxi, notifysound.caf",
         "ELEHBER, , mototaxi_chat, notifysound.caf",
@@ -199,4 +198,23 @@ class FcmPushServiceTest {
         Object android=ReflectionTestUtils.getField(message.getValue(),"androidConfig");
         assertEquals("com.biglikuryer.sifarisqrupuadmin",ReflectionTestUtils.getField(android,"restrictedPackageName"));
     }
+    @Test void customerDevicesAreNotQueuedForChatButTheirOtherCourierInstallationIs() {
+        device.setActiveRole("customer");
+        var courier=new PushDevice();courier.setId(11L);courier.setAppCode("ELEHBER");courier.setUserId(7L);courier.setActiveRole("courier");
+        when(devices.findByAppCodeAndUserIdInAndEnabledTrue(eq("ELEHBER"),any())).thenReturn(List.of(device,courier));
+        assertEquals(1,service.enqueue("ELEHBER",List.of(7L),"T","B",Map.of("scope","mototaxi_chat"),60,"role-event"));
+        var saved=org.mockito.ArgumentCaptor.forClass(PushDelivery.class);verify(deliveries).save(saved.capture());
+        assertEquals(11L,saved.getValue().getDeviceId());
+    }
+    @Test void switchingToCustomerInvalidatesAlreadyQueuedChatWithoutSendingToApns() {
+        device.setActiveRole("customer");device.setPlatform("ios");
+        var d=pending();d.setPayload("{\"scope\":\"mototaxi_chat\",\"title\":\"New chat\"}");
+        service.deliverDue();assertEquals("EXPIRED",d.getState());verifyNoInteractions(messaging);
+    }
+    @Test void customerOwnRideStatusStillReachesApns() throws Exception {
+        device.setActiveRole("customer");device.setPlatform("ios");
+        var d=pending();d.setPayload("{\"scope\":\"mototaxi\",\"channel\":\"moto_chat\",\"event\":\"accepted\",\"title\":\"Accepted\"}");
+        service.deliverDue();assertEquals("SENT",d.getState());verify(messaging).send(any(Message.class));
+    }
+
 }

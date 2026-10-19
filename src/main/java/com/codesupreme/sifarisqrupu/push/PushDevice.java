@@ -13,6 +13,8 @@ public class PushDevice {
     @Column(nullable=false) private Long userId;
     @Column(nullable=false, length=4096) private String token;
     @Column(nullable=false, length=16) private String platform;
+    // Installation-local UI role; shared User.userType remains a courier capability.
+    @Column(length=16) private String activeRole;
     private boolean enabled;
     private long updatedAt;
 }

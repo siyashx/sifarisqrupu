@@ -53,4 +53,24 @@ class PushControllerTest {
         var request=new PushController.DeviceRequest("ELEHBER","installation-123456","valid-fcm-token-123456789012345",null,true);
         assertThrows(IllegalArgumentException.class,()->controller.register("valid",request));verify(devices,never()).save(any());
     }
+    @Test void registrationStoresActiveRolePerInstallationWithoutChangingSharedAccount() {
+        controller.register("valid",new PushController.DeviceRequest("ELEHBER","installation-123456",
+            "valid-fcm-token-123456789012345","ios",true,"customer"));
+        var captured=org.mockito.ArgumentCaptor.forClass(PushDevice.class);verify(devices).save(captured.capture());
+        assertEquals("customer",captured.getValue().getActiveRole());
+        assertEquals(7L,captured.getValue().getUserId());
+    }
+    @Test void invalidActiveRoleIsRejected() {
+        assertThrows(IllegalArgumentException.class,()->controller.register("valid",new PushController.DeviceRequest(
+            "ELEHBER","installation-123456","valid-fcm-token-123456789012345","ios",true,"admin")));
+        verify(devices,never()).save(any());
+    }
+    @Test void oldClientClearsInstallationRoleInsteadOfInheritingAnotherAccountRole() {
+        var device=new PushDevice();device.setActiveRole("customer");device.setUserId(99L);
+        when(devices.findByAppCodeAndInstallationId("ELEHBER","installation-123456")).thenReturn(Optional.of(device));
+        controller.register("valid",new PushController.DeviceRequest("ELEHBER","installation-123456",
+            "valid-fcm-token-123456789012345","android",true));
+        assertNull(device.getActiveRole());assertEquals(7L,device.getUserId());
+    }
+
 }

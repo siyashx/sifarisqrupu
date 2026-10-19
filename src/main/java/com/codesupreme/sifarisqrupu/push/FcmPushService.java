@@ -82,6 +82,7 @@ public class FcmPushService {
         if(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>3500) throw new IllegalArgumentException("Push payload too large");
         int queued=0;
         for(PushDevice device:devices.findByAppCodeAndUserIdInAndEnabledTrue(appCode,userIds)) {
+            if(!PushDeliveryPolicy.allowsDevice(values,device)) continue;
             if(deliveries.existsByEventIdAndDeviceId(id,device.getId())) continue;
             PushDelivery item=new PushDelivery();
             item.setEventId(id); item.setDeviceId(device.getId()); item.setUserId(device.getUserId()); item.setAppCode(appCode);
@@ -112,7 +113,7 @@ public class FcmPushService {
             }
             try {
                 Map<String,String> data=json.readValue(delivery.getPayload(),new TypeReference<Map<String,String>>(){});
-                if(!policy.allows(data,delivery.getUserId())) {
+                if(!PushDeliveryPolicy.allowsDevice(data,device) || !policy.allows(data,delivery.getUserId())) {
                     delivery.setState("EXPIRED"); deliveries.save(delivery); return;
                 }
                 long remaining=delivery.getExpiresAt()-now;

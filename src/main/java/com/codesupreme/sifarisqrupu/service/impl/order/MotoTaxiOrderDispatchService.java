@@ -122,6 +122,9 @@ public class MotoTaxiOrderDispatchService {
             normalizeSearchDeadline(order, now);
             normalizeLegacyOfferState(order, now);
 
+            if (Objects.equals(order.getCustomerId(), courierId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Öz sifarişinizi qəbul edə bilməzsiniz");
+            }
             if (Boolean.TRUE.equals(order.getIsDisable()) || !NO_COURIER.equals(order.getStatus())) {
                 return AcceptResult.error(
                         HttpStatus.CONFLICT,
@@ -513,6 +516,9 @@ public class MotoTaxiOrderDispatchService {
         }
 
         Set<Long> excluded = new HashSet<>();
+        // A courier-capable account may currently be ordering as a customer.
+        // Never dispatch its own order back to that same account.
+        if (order.getCustomerId() != null) excluded.add(order.getCustomerId());
         if (order.getCancelledCourierIds() != null) {
             excluded.addAll(order.getCancelledCourierIds());
         }
@@ -587,7 +593,7 @@ public class MotoTaxiOrderDispatchService {
             User courier = courierId == null ? null : userRepository.findById(courierId).orElse(null);
 
             boolean expired = expiresAt == null || !expiresAt.after(now);
-            boolean unavailable = courier == null
+            boolean unavailable = Objects.equals(courierId, order.getCustomerId()) || courier == null
                     || !isCourierEligible(courier, busyCourierIds)
                     || !isCourierWithinRadius(courier, pickup, dispatchRadiusKm);
 
