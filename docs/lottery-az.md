@@ -113,3 +113,16 @@ Tətbiqdə ödəniş emalı qurulmayıb, bilet admin tərəfindən verilir. Əg�
 - Təsdiqdən imtina etdikdə əməliyyat olmasın. Eyni bileti paralel geri alma satış sayını iki dəfə azaltmasın. Adi istifadəçi revoke/delete API-lərini çağıra bilməsin.
 - Lotoreyanı silin: həm admin, həm istifadəçi siyahısından çıxsın; silinmiş lotoreyanın açıq səhifəsi serverdə 404 qaytarsın. Çarx fırlanarkən silmək mümkün olmasın.
 - Android-də 48 px alt naviqasiya sahəsi ilə son kartın aşağı hissəsi tam görünsün.
+
+
+## 23 oktyabr — etibarsız FCM tokeninin bərpası
+
+Serverdə `UNREGISTERED / NotRegistered` xətası təsdiqləndi. Qeydiyyat sorğusu eyni keşlənmiş tokeni yenidən aktivləşdirə bilirdi. PushDevice indi rədd edilmiş tokenin SHA-256 izini saxlayır (`rejected_token_hash`, nullable); Zakaz qeydiyyatı həmin token üçün `registered:false, tokenRefreshRequired:true` qaytarır və cihazı söndürülmüş saxlayır. Yeni token qəbul edildikdə bu qeyd təmizlənir. Digər tətbiqlərin qeydiyyat protokolu əvvəlki davranışı saxlayır.
+
+Zakaz Qrupu bu cavabda Firebase tokenini silib yenisini alır, yalnız eyni sessiya aktivdirsə yenidən qeydiyyata göndərir. Bir cəhddə ən çox bir yeniləmə edilir; eyni token qaytarıldıqda sonsuz dövr yaranmır. Android bildirişi sistemə göndərilmədən “göstərilib” kimi qeyd olunmur; lotoreya üçün alınma/göstərilməmə səbəbləri token, parol və mesaj mətni olmadan logcat-a yazılır.
+
+Canlı yoxlama: istifadəçi emulyatorda çıxış/giriş edib admin paneldən yenidən bildiriş göndərdi. Yeni token 18:27:31 UTC-də yarandı; `lottery-4-live-6` üçün cihaz qeydi və Android-də aktiv lotoreya bildirişi təsdiqləndi. Bu, manual token yenilənməsinin real nəticəsidir; yeni avtomatik bərpa protokolu lokal testlərdə yoxlanılıb, VPS-ə deploy edilməyib.
+
+Avtomatik bərpanın işləməsi üçün backend və Zakaz Qrupu yenilənməlidir. Native Android kodu da dəyişdiyi üçün tam tətbiq yenidən başladılmalıdır; hot reload kifayət etmir. Bu dəyişiklik üçün admin paneldə yeni kod yoxdur. Testlər: 68 backend, 5 Flutter testi keçdi; Flutter analizi təmizdir.
+
+Android `:app:compileDebugKotlin` yoxlaması da uğurludur (7 dəqiqə 24 saniyə); APK/AAB paketlənməyib.

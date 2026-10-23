@@ -142,7 +142,9 @@ public class FcmPushService {
                         delivery.setNextAttemptAt(now+1000);
                         delivery.setState(delivery.getAttempts()<8 ? "PENDING" : "FAILED");
                     } else {
-                        if(current!=null && Objects.equals(current.getToken(),device.getToken())) {current.setEnabled(false);devices.save(current);}
+                        if(current!=null && Objects.equals(current.getToken(),device.getToken())) {
+                            current.rejectToken(device.getToken());current.setEnabled(false);devices.save(current);
+                        }
                         delivery.setState("FAILED");
                     }
                 } else if(code==MessagingErrorCode.INVALID_ARGUMENT || code==MessagingErrorCode.SENDER_ID_MISMATCH) {

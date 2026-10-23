@@ -9,6 +9,27 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PushControllerTest {
+    @Test void cachedRejectedZakazTokenCannotBeEnabledAgain() {
+        var device=new PushDevice();device.setId(10L);device.setToken("invalid-fcm-token-123456789012345");
+        device.rejectToken(device.getToken());device.setEnabled(false);
+        when(devices.findByAppCodeAndInstallationId("ZAKAZ","installation-123456")).thenReturn(Optional.of(device));
+        var result=controller.register("valid",new PushController.DeviceRequest("ZAKAZ","installation-123456",
+            device.getToken(),"android",true,"customer"));
+        assertEquals(true,result.get("tokenRefreshRequired"));assertEquals(false,result.get("registered"));
+        assertFalse(device.isEnabled());
+        var replacement=controller.register("valid",new PushController.DeviceRequest("ZAKAZ","installation-123456",
+            "replacement-token-123456789012345","android",true,"customer"));
+        assertEquals(false,replacement.get("tokenRefreshRequired"));assertEquals(true,replacement.get("registered"));
+        assertTrue(device.isEnabled());assertNull(device.getRejectedTokenHash());
+    }
+
+    @Test void rejectedTokenCannotBeReusedUnderAnotherInstallation() {
+        var previous=new PushDevice();previous.setId(10L);previous.rejectToken("invalid-fcm-token-123456789012345");
+        when(devices.findByAppCodeAndToken("ZAKAZ","invalid-fcm-token-123456789012345")).thenReturn(List.of(previous));
+        var result=controller.register("valid",new PushController.DeviceRequest("ZAKAZ","installation-new-1234",
+            "invalid-fcm-token-123456789012345","android",true,"customer"));
+        assertEquals(true,result.get("tokenRefreshRequired"));
+    }
     PushAuth auth;
     PushDeviceRepository devices;
     FcmPushService fcm;

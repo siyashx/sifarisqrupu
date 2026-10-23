@@ -167,6 +167,8 @@ class FcmPushServiceTest {
         when(error.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
         when(messaging.send(any(Message.class))).thenThrow(error);
         service.deliverDue();assertEquals("FAILED",d.getState());assertFalse(device.isEnabled());
+        assertTrue(device.isRejectedToken("test-device-token"));
+        assertFalse(device.isRejectedToken("replacement-token"));
     }
     @Test void tokenRotationDuringSendRetriesWithoutDisablingNewToken() throws Exception {
         var d=pending();var current=new PushDevice();current.setId(10L);current.setUserId(7L);current.setAppCode("ELEHBER");

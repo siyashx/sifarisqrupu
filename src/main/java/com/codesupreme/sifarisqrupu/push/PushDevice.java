@@ -17,4 +17,17 @@ public class PushDevice {
     @Column(length=16) private String activeRole;
     private boolean enabled;
     private long updatedAt;
+    // Keep a fingerprint so a cached, unregistered token cannot be re-enabled.
+    @Column(length=64) private String rejectedTokenHash;
+
+    public void rejectToken(String value) { rejectedTokenHash=tokenHash(value); }
+    public boolean isRejectedToken(String value) {
+        return rejectedTokenHash!=null && rejectedTokenHash.equals(tokenHash(value));
+    }
+    private static String tokenHash(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch(java.security.NoSuchAlgorithmException e) {throw new IllegalStateException(e);}
+    }
 }

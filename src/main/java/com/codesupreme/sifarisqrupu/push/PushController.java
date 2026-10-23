@@ -53,14 +53,19 @@ public class PushController {
         if(request.activeRole()!=null && !Set.of("customer","courier").contains(request.activeRole()))
             throw new IllegalArgumentException("Invalid active role");
         PushDevice device=devices.findByAppCodeAndInstallationId(app,request.installationId()).orElseGet(PushDevice::new);
-        for(PushDevice other:devices.findByAppCodeAndToken(app,request.token())) {
+        var sameTokenDevices=devices.findByAppCodeAndToken(app,request.token());
+        boolean refreshRequired="ZAKAZ".equals(app) && (device.isRejectedToken(request.token()) ||
+            sameTokenDevices.stream().anyMatch(d->d.isRejectedToken(request.token())));
+        for(PushDevice other:sameTokenDevices) {
             if(!Objects.equals(other.getId(),device.getId())) {other.setEnabled(false);devices.save(other);}
         }
         device.setAppCode(app);device.setInstallationId(request.installationId());device.setUserId(user.getId());
-        device.setPlatform(request.platform());device.setToken(request.token());device.setEnabled(request.enabled());
+        device.setPlatform(request.platform());device.setToken(request.token());device.setEnabled(request.enabled() && !refreshRequired);
+        if(refreshRequired) device.rejectToken(request.token());
+        else if(!device.isRejectedToken(request.token())) device.setRejectedTokenHash(null);
         device.setActiveRole(Set.of("ELEHBER","ZAKAZ").contains(app) ? request.activeRole() : null);
         device.setUpdatedAt(System.currentTimeMillis());devices.save(device);
-        return Map.of("registered",true,"fcmEnabled",fcm.isEnabled());
+        return Map.of("registered",!refreshRequired,"tokenRefreshRequired",refreshRequired,"fcmEnabled",fcm.isEnabled());
     }
     @PostMapping("/devices/revoke") @Transactional
     public synchronized Map<String,Boolean> revoke(@RequestHeader(value="Authorization",required=false) String authorization,
