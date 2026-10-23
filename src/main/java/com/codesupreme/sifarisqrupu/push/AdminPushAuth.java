@@ -19,7 +19,7 @@ public class AdminPushAuth {
     }
     public Admin requireAdmin(String authorization) {
         try {
-            // This credential is accepted only by the admin-push controller, for admin 1.
+            // This credential is accepted by authenticated admin push/lottery APIs, for admin 1.
             if(authorization!=null && authorization.startsWith("Bearer ")) {
                 String key=authorization.substring(7);
                 if(!appKeyHash.matches("[a-fA-F0-9]{64}") || !key.matches("[A-Za-z0-9_-]{43}")) throw new IllegalArgumentException();
