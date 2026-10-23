@@ -16,5 +16,7 @@ public class AdminLotteryController {
     @PostMapping("/{id}/tickets") public Map<String,Object> issue(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@RequestBody LotteryService.Issue request){return Map.of("codes",service.issue(id,request,auth.requireAdmin(key).getId()));}
     @PostMapping("/{id}/live") public LotteryService.View open(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@RequestBody LotteryService.Open request){auth.requireAdmin(key);return service.open(id,request);}
     @PostMapping("/{id}/spin") public LotteryService.View spin(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id){auth.requireAdmin(key);return service.spin(id);}
-    @PostMapping("/{id}/notify") public Map<String,Integer> notify(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id){auth.requireAdmin(key);return Map.of("queued",service.notifyParticipants(id));}
+    @PostMapping("/{id}/notify") public LotteryService.Notice notify(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id){auth.requireAdmin(key);return service.notifyParticipants(id);}
+    @PostMapping("/{id}/tickets/{code}/revoke") public LotteryService.View revoke(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@PathVariable String code){return service.revokeTicket(id,code,auth.requireAdmin(key).getId());}
+    @PostMapping("/{id}/delete") public Map<String,Boolean> delete(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id){service.delete(id,auth.requireAdmin(key).getId());return Map.of("deleted",true);}
 }

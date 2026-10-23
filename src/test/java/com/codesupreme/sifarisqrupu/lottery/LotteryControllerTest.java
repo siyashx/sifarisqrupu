@@ -37,4 +37,11 @@ class LotteryControllerTest {
         var device=new PushDevice();device.setAppCode("ZAKAZ");device.setActiveRole("customer");
         for(String event:List.of("live","won","lost")) assertTrue(PushDeliveryPolicy.allowsDevice(Map.of("scope","lottery","channel","lottery","event",event),device));
     }
+    @Test void onlyAdminMayRevokeTicketsOrDeleteLotteries() throws Exception {
+        for(String path:List.of("/api/v5/push/admin/lotteries/42/tickets/00001/revoke","/api/v5/push/admin/lotteries/42/delete")) {
+            mvc.perform(post(path).header("Authorization","member-token")).andExpect(status().isUnauthorized());
+            mvc.perform(post(path)).andExpect(status().isUnauthorized());
+        }
+        verifyNoInteractions(service);
+    }
 }

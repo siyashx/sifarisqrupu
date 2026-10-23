@@ -38,10 +38,12 @@ public class LotteryService {
     public record View(Long id,long version,String title,String description,String imageUrl,long drawAt,
         BigDecimal ticketPrice,int totalTickets,int soldTickets,double soldPercent,String status,int durationSeconds,
         Long startedAt,Long endsAt,Double finalRotation,String winnerTicket,String winnerName,Person winner,
-        List<String> myTickets,long serverNow) {}
+        List<String> myTickets,long serverNow,long createdAt,Notice notification,List<String> wheelTickets) {}
+    public record Notice(int queued,int participants,boolean fcmEnabled) {}
     public record PageView<T>(List<T> items,long total,int page,int pages) {}
 
-    private Lottery locked(Long id) {return lotteries.lock(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı."));}
+    private Lottery visible(Lottery l) {if(l.isDeleted()) throw error(HttpStatus.NOT_FOUND,"Lotoreya silinib və ya mövcud deyil.");return l;}
+    private Lottery locked(Long id) {return visible(lotteries.lock(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı.")));}
     private static ResponseStatusException error(HttpStatus status,String message) {return new ResponseStatusException(status,message);}
     private static void require(boolean condition,String message) {if(!condition) throw error(HttpStatus.CONFLICT,message);}
     private static String clean(String value) {return value==null ? "" : value.strip();}
@@ -67,21 +69,23 @@ public class LotteryService {
         l.setTitle(clean(f.title()));l.setDescription(clean(f.description()));l.setImageUrl(clean(f.imageUrl()));
         l.setDrawAt(f.drawAt());l.setTicketPrice(f.ticketPrice());l.setTotalTickets(f.totalTickets());
     }
-    private View view(Lottery l,Long userId,boolean admin) {
+    private View view(Lottery l,Long userId,boolean admin) { return view(l,userId,admin,null); }
+    private View view(Lottery l,Long userId,boolean admin,Notice notification) {return view(l,userId,admin,notification,true);}
+    private View view(Lottery l,Long userId,boolean admin,Notice notification,boolean includeWheel) {
         User winner=null;
         if("COMPLETED".equals(l.getStatus()) && l.getWinnerNumber()!=null) {
             winner=tickets.findByLotteryIdAndNumber(l.getId(),l.getWinnerNumber()).flatMap(t->users.findById(t.getUserId())).orElse(null);
         }
-        var own=userId==null ? List.<String>of() : tickets.findByLotteryIdAndUserIdOrderByNumber(l.getId(),userId).stream().map(LotteryTicket::code).toList();
+        var own=userId==null ? List.<String>of() : tickets.findByLotteryIdAndUserIdAndRevokedFalseOrderByNumber(l.getId(),userId).stream().map(LotteryTicket::code).toList();
         return new View(l.getId(),l.getVersion(),l.getTitle(),l.getDescription(),l.getImageUrl(),l.getDrawAt(),l.getTicketPrice(),l.getTotalTickets(),l.getSoldTickets(),
             l.getTotalTickets()==0 ? 0 : l.getSoldTickets()*100.0/l.getTotalTickets(),l.getStatus(),l.getDurationSeconds(),l.getStartedAt(),l.getEndsAt(),l.getFinalRotation(),
-            "COMPLETED".equals(l.getStatus()) ? code(l.getWinnerNumber()) : null,winner==null ? null : winner.getName(),admin && winner!=null ? person(winner):null,own,System.currentTimeMillis());
+            "COMPLETED".equals(l.getStatus()) ? code(l.getWinnerNumber()) : null,winner==null ? null : winner.getName(),admin && winner!=null ? person(winner):null,own,System.currentTimeMillis(),l.getCreatedAt(),notification,includeWheel && Set.of("LIVE","DRAWING","COMPLETED").contains(l.getStatus()) ? tickets.findByLotteryIdAndRevokedFalseOrderByNumber(l.getId()).stream().map(LotteryTicket::code).toList() : List.of());
     }
     @Transactional(readOnly=true) public List<View> list(Long user,boolean admin) {
-        return lotteries.findAllByOrderByCreatedAtDesc().stream().filter(l->admin || !"CANCELLED".equals(l.getStatus())).map(l->view(l,user,admin)).toList();
+        return lotteries.findByDeletedFalseOrderByCreatedAtDesc().stream().filter(l->admin || !"CANCELLED".equals(l.getStatus())).map(l->view(l,user,admin,null,false)).toList();
     }
     @Transactional(readOnly=true) public View detail(Long id,Long user,boolean admin) {
-        var l=lotteries.findById(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı."));return view(l,user,admin);
+        var l=visible(lotteries.findById(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı.")));return view(l,user,admin);
     }
     @Transactional public View create(Form form,Long admin) {
         var l=new Lottery();apply(l,form);l.setCreatedBy(admin);l.setCreatedAt(System.currentTimeMillis());change(l);return view(l,null,true);
@@ -103,50 +107,72 @@ public class LotteryService {
         var old=tickets.findByLotteryIdAndRequestIdOrderByNumber(id,request.requestId());
         if(!old.isEmpty()) {
             require(old.stream().map(LotteryTicket::getUserId).collect(java.util.stream.Collectors.toSet()).equals(ids),"Sorğu identifikatoru artıq istifadə edilib.");
+            require(old.stream().noneMatch(LotteryTicket::isRevoked),"Bu sorğunun bileti geri alınıb. Yeni bilet vermə əməliyyatı başladın.");
             return old.stream().map(LotteryTicket::code).toList();
         }
         require("ACTIVE".equals(l.getStatus()),"Bilet verilməsi bağlanıb.");
         require(l.getSoldTickets()+ids.size()<=l.getTotalTickets(),"Kifayət qədər boş bilet yoxdur.");
         var people=users.findAllById(ids);
         require(people.size()==ids.size() && people.stream().noneMatch(u->Boolean.TRUE.equals(u.getIsDisable())),"İstifadəçi tapılmadı və ya deaktivdir.");
+        int next=tickets.findFirstByLotteryIdOrderByNumberDesc(id).map(LotteryTicket::getNumber).orElse(0);
+        require(next+ids.size()<=99999,"Bu lotoreya üçün bilet kodu limiti dolub.");
         var issued=new ArrayList<LotteryTicket>();
         for(Long user:ids) {
-            var ticket=new LotteryTicket();ticket.setLotteryId(id);ticket.setNumber(l.getSoldTickets()+1);ticket.setUserId(user);
+            var ticket=new LotteryTicket();ticket.setLotteryId(id);ticket.setNumber(++next);ticket.setUserId(user);
             ticket.setRequestId(request.requestId());ticket.setIssuedBy(admin);ticket.setCreatedAt(System.currentTimeMillis());
-            tickets.save(ticket);issued.add(ticket);l.setSoldTickets(ticket.getNumber());
+            tickets.save(ticket);issued.add(ticket);l.setSoldTickets(l.getSoldTickets()+1);
         }
         change(l);return issued.stream().map(LotteryTicket::code).toList();
+    }
+    @Transactional public View revokeTicket(Long id,String ticketCode,Long admin) {
+        var l=locked(id);
+        require("ACTIVE".equals(l.getStatus()),"Bilet yalnız lotoreya canlı başlamazdan əvvəl geri alına bilər.");
+        if(ticketCode==null || !ticketCode.matches("[0-9]{5}") || Integer.parseInt(ticketCode)<1)
+            throw error(HttpStatus.BAD_REQUEST,"Bilet kodu düzgün deyil.");
+        var ticket=tickets.findByLotteryIdAndNumber(id,Integer.parseInt(ticketCode)).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Bilet tapılmadı."));
+        if(ticket.isRevoked()) return view(l,null,true);
+        ticket.setRevoked(true);ticket.setRevokedBy(admin);ticket.setRevokedAt(System.currentTimeMillis());tickets.saveAndFlush(ticket);
+        l.setSoldTickets(l.getSoldTickets()-1);change(l);return view(l,null,true);
+    }
+    @Transactional public void delete(Long id,Long admin) {
+        var l=lotteries.lock(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı."));
+        if(l.isDeleted()) return;
+        require(!"DRAWING".equals(l.getStatus()),"Çarx fırlanarkən lotoreya silinə bilməz. Nəticəni gözləyin.");
+        l.setDeleted(true);l.setDeletedBy(admin);l.setDeletedAt(System.currentTimeMillis());change(l);
     }
     @Transactional public View open(Long id,Open request) {
         var l=locked(id);require(Set.of("ACTIVE","LIVE").contains(l.getStatus()),"Bu lotoreyanın çarxı artıq başladılıb və ya bağlanıb.");
         require(l.getSoldTickets()>0,"Əvvəlcə ən azı bir bilet verin.");
         if(request.durationSeconds()<5 || request.durationSeconds()>3600) throw error(HttpStatus.BAD_REQUEST,"Müddət 5–3600 saniyə olmalıdır.");
         require(!early(l) || request.confirmEarly(),"Çarxı lotoreya tarixindən əvvəl çevirməkdən əminsiniz?");
-        boolean opening="ACTIVE".equals(l.getStatus());
         l.setStatus("LIVE");l.setDurationSeconds(request.durationSeconds());change(l);
-        if(opening && request.notifyParticipants()) notifyLocked(l);
-        return view(l,null,true);
+        Notice notification=request.notifyParticipants() ? notifyLocked(l) : null;
+        return view(l,null,true,notification);
     }
     @Transactional public View spin(Long id) {
         var l=locked(id);require("LIVE".equals(l.getStatus()),"Çarx artıq fırladılıb və ya canlı rejim açılmayıb.");
-        l.setWinnerNumber(random.nextInt(l.getSoldTickets())+1);
+        var eligible=tickets.findByLotteryIdAndRevokedFalseOrderByNumber(id);
+        require(!eligible.isEmpty() && eligible.size()==l.getSoldTickets(),"İştirakçı biletləri yenidən yoxlayın.");
+        int winnerIndex=random.nextInt(eligible.size());
+        l.setWinnerNumber(eligible.get(winnerIndex).getNumber());
         long now=System.currentTimeMillis();l.setStartedAt(now+2000);l.setEndsAt(l.getStartedAt()+l.getDurationSeconds()*1000L);
         double step=2*Math.PI/l.getSoldTickets();
-        double landing=(2*Math.PI-(l.getWinnerNumber()-1)*step)%(2*Math.PI);
+        double landing=(2*Math.PI-winnerIndex*step)%(2*Math.PI);
         // Whole revolutions are essential: the pointer must end on the winner.
         l.setFinalRotation(2*Math.PI*Math.max(8,(int)Math.ceil(l.getDurationSeconds()/3.0))+landing);
         l.setStatus("DRAWING");change(l);return view(l,null,true);
     }
-    @Transactional public int notifyParticipants(Long id) {
+    @Transactional public Notice notifyParticipants(Long id) {
         var l=locked(id);require(Set.of("LIVE","DRAWING").contains(l.getStatus()),"Lotoreya hazırda canlı deyil.");return notifyLocked(l);
     }
-    private int notifyLocked(Lottery l) {
+    private Notice notifyLocked(Lottery l) {
         l.setNotificationRound(l.getNotificationRound()+1);lotteries.save(l);
         var participants=new LinkedHashSet<Long>();
         int page=0;Page<LotteryTicket> rows;
-        do {rows=tickets.findByLotteryIdOrderByNumber(l.getId(),PageRequest.of(page++,500));rows.forEach(t->participants.add(t.getUserId()));} while(rows.hasNext());
-        return fcm.enqueue("ZAKAZ",participants,"🔴 Lotoreya hazırda keçirilir",l.getTitle()+" — Lotoreyanı canlı izləmək üçün bildiriş üzərinə klik edin.",
+        do {rows=tickets.findByLotteryIdAndRevokedFalseOrderByNumber(l.getId(),PageRequest.of(page++,500));rows.forEach(t->participants.add(t.getUserId()));} while(rows.hasNext());
+        int queued=fcm.enqueue("ZAKAZ",participants,"🔴 Lotoreya hazırda keçirilir",l.getTitle()+" — Lotoreyanı canlı izləmək üçün bildiriş üzərinə klik edin.",
             Map.of("scope","lottery","channel","lottery","lotteryId",l.getId(),"event","live"),300,"lottery-"+l.getId()+"-live-"+l.getNotificationRound());
+        return new Notice(queued,participants.size(),fcm.isEnabled());
     }
     @Transactional public void finish(Long id) {
         var l=locked(id);
@@ -158,7 +184,7 @@ public class LotteryService {
         var participants=new TreeMap<Long,List<String>>();
         int page=0;Page<LotteryTicket> rows;
         do {
-            rows=tickets.findByLotteryIdOrderByNumber(id,PageRequest.of(page++,500));
+            rows=tickets.findByLotteryIdAndRevokedFalseOrderByNumber(id,PageRequest.of(page++,500));
             rows.forEach(t->participants.computeIfAbsent(t.getUserId(),ignored->new ArrayList<>()).add(t.code()));
         } while(rows.hasNext());
         for(var participant:participants.entrySet()) {
@@ -179,7 +205,8 @@ public class LotteryService {
         return new PageView<>(result.map(LotteryService::person).getContent(),result.getTotalElements(),result.getNumber(),result.getTotalPages());
     }
     @Transactional(readOnly=true) public PageView<TicketView> ticketPage(Long id,int page) {
-        var result=tickets.findByLotteryIdOrderByNumber(id,PageRequest.of(Math.max(0,page),50));
+        visible(lotteries.findById(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı.")));
+        var result=tickets.findByLotteryIdAndRevokedFalseOrderByNumber(id,PageRequest.of(Math.max(0,page),50));
         var people=new HashMap<Long,Person>();users.findAllById(result.stream().map(LotteryTicket::getUserId).distinct().toList()).forEach(u->people.put(u.getId(),person(u)));
         return new PageView<>(result.stream().map(t->new TicketView(t.code(),people.getOrDefault(t.getUserId(),new Person(t.getUserId(),"Silinmiş istifadəçi","")),t.getCreatedAt())).toList(),result.getTotalElements(),result.getNumber(),result.getTotalPages());
     }

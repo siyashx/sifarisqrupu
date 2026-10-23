@@ -4,7 +4,9 @@ import org.springframework.data.domain.*;
 import java.util.*;
 public interface LotteryTicketRepository extends JpaRepository<LotteryTicket,Long> {
     List<LotteryTicket> findByLotteryIdAndRequestIdOrderByNumber(Long lotteryId,String requestId);
-    List<LotteryTicket> findByLotteryIdAndUserIdOrderByNumber(Long lotteryId,Long userId);
+    List<LotteryTicket> findByLotteryIdAndUserIdAndRevokedFalseOrderByNumber(Long lotteryId,Long userId);
     Optional<LotteryTicket> findByLotteryIdAndNumber(Long lotteryId,int number);
-    Page<LotteryTicket> findByLotteryIdOrderByNumber(Long lotteryId,Pageable page);
+    Optional<LotteryTicket> findFirstByLotteryIdOrderByNumberDesc(Long lotteryId);
+    List<LotteryTicket> findByLotteryIdAndRevokedFalseOrderByNumber(Long lotteryId);
+    Page<LotteryTicket> findByLotteryIdAndRevokedFalseOrderByNumber(Long lotteryId,Pageable page);
 }

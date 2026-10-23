@@ -44,10 +44,10 @@ Adminin Android native modulu dəyişdiyi üçün yeni admin build-i lazımdır;
 
 ## Avtomatik yoxlamalar
 
-- 48 Flutter testi, o cümlədən 6 lotoreya testi: keçdi.
-- 13 lotoreya backend testi: real H2 tranzaksiyası/eyni son bilet üçün paralel sorğular, idempotentlik, tarix yoxlaması, dəyişməz qalib, nəticə bildirişlərinin birləşməsi, şəxsi məlumatlar və API icazələri.
+- 52 Flutter testi, o cümlədən 10 lotoreya/bildiriş testi: keçdi.
+- 15 lotoreya backend testi: real H2 tranzaksiyası/eyni son bilet üçün paralel sorğular, idempotentlik, tarix yoxlaması, dəyişməz qalib, nəticə bildirişlərinin birləşməsi, şəxsi məlumatlar və API icazələri.
 - Əlavə 49 mövcud push testi keçdi.
-- 15 admin React/Node testi keçdi. Yeni testlər iki sütunlu kartları, bitmiş lotoreyadakı düymələri, overlay axtarışını, native API və ortaq çarx hesabını yoxlayır.
+- 18 admin React/Node testi keçdi. Yeni testlər kartları, bitmiş lotoreyadakı düymələri, overlay axtarışını, native API və ortaq çarx hesabını yoxlayır.
 - Native yol filtrinin Kotlin kompilyasiyası və 14 yoxlama keçdi; tam Android build hazırlanmadı.
 - 29 iOS dependency/config yoxlaması və `pod install` keçdi.
 - Dəyişən Flutter lotoreya fayllarında analiz problemi yoxdur.
@@ -73,3 +73,43 @@ Tətbiqdə ödəniş emalı qurulmayıb, bilet admin tərəfindən verilir. Əg�
 
 - https://developer.apple.com/app-store/review/guidelines/#gaming-gambling-and-lotteries
 - https://support.google.com/googleplay/android-developer/answer/9877032?hl=en
+
+
+## 23 oktyabr — kartlar, nəticə və bildiriş yeniləməsi
+
+- Hər sətirdə bir kompakt üfüqi kart: solda ekran eninə uyğun 118–168 px şəkil, sağda məlumatlar. Şəkildə yuxarı ortada kiçik tarix nişanı. İstifadəçi şəklə toxunanda 2048 px-ə qədər şəkli böyüdə bilir; kartın qalan hissəsi uyğun lotoreya səhifəsini açır.
+- İstifadəçi kartında satış yalnız faiz/progress ilə görünür; bilet kodlarının yanındakı “Cəmi” çıxarılıb. Admin satış sayını görür.
+- Filtrlər: Hamısı, Canlı, Yaxında, Aktiv, Bitmiş. Yaxında növbəti 7 günə qədər olan (və gecikmiş) aktiv lotoreyaları əhatə edir. Hamısı sırası: canlılar, ən yaxın tarixlilər, qalan aktivlər yeni yaradılana görə, sonda bitmişlər/ləğv edilənlər. Köhnə backend-də createdAt yoxdursa ID sırası işlənir.
+- Nəticə hər girişdə ortada ayrıca, scroll olmayan pəncərədə açılır. Fişənglər kartın önündədir. Qələbə melodiyası yerinə ayrıca lottery_fireworks_v2.wav real fişəng səsi qoşulub; səs mənbəyi asset qovluğundakı LOTTERY_AUDIO.md-dədir. Admin əlaqə seçimləri iki bərabər ikonlu kartdır.
+- Admin çarxı native Animated transform ilə fırlanır; hər kadrda React/SVG yenidən qurulmur. Flutter sabit təsviri RepaintBoundary-də saxlayır, yalnız fırlanma qatı dəyişir. Ortaq server vaxtı və cubic yavaşlama qalır. Bütün fiziki cihazlarda sıfır kadr itkisinə zəmanət verilməyib.
+- Android foreground FCM mesajı native showNotification körpüsünə də ötürülür. Native eventId filtrinin hesab/rol/expiry/dedup yoxlamaları saxlanılıb. Admin bildiriş cavabı fcmEnabled, participants, queued qaytarır; növbəyə yazılma çatdırılma təsdiqi kimi təqdim edilmir.
+- Ana səhifədə Lotoreya düyməsinin sağ yuxarı qırmızı nişanı ACTIVE/LIVE/DRAWING sayını göstərir, sıfırda gizlənir. STOMP və ehtiyat sorğularla yenilənir.
+- İstifadəçi kart düymələri sabit 40/42 px ilə məhdudlaşmır; minimum 48 px və böyüyən mətnə uyğun hündürlük verilib.
+
+### Bu dəyişikliklərin yoxlanması
+
+1. Həm tətbiqi, həm admini tam yenidən başladın. Android native showNotification körpüsü hot reload ilə əlavə olunmur: Zakaz Qrupu prosesini dayandırıb flutter run edin. Yeni audio asset-i üçün də tətbiqi yenidən başlatmaq lazımdır.
+2. VPS-də yeni backend kodunu ayrıca deploy edin. Bu işdə deploy və mobil release build edilməyib.
+3. Bileti olan müştəri ilə Zakaz Qrupunu açıq saxlayın, admindən bildiriş göndərin; sonra arxa planda da yoxlayın. Hesab fərqlidirsə bildiriş göstərilməməlidir. Bildirişə toxunanda həmin lotoreya açılsın. Real FCM çatdırılmasını VPS logları ilə təsdiqləyin.
+4. Canlı, yaxın, uzaq tarixli və bitmiş lotoreyaları eyni siyahıda yoxlayın. Birini yaradıb/ləğv edib ana səhifə nişanının yenilənməsinə baxın.
+5. Kiçik ekranda və böyük sistem şriftində Bilet al, Canlı izlə, Nəticəyə bax düymələrinin mətnlərini yoxlayın. Şəkli böyüdün, bağlayın və kartın mətninə toxunaraq uyğun səhifəyə keçin.
+6. Çarxa gec qoşulun, adminlə eyni biletdə dayanmasını, nəticə pəncərəsini və təkrar girişdə yenidən açılmasını yoxlayın. Səsi bağlama və əlaqə seçimlərinə baxın.
+
+
+## Bilet geri alma və lotoreyanı silmə
+
+- Admin lotoreya məlumatlarında hər aktiv biletin yanındakı “Geri al” düyməsindən istifadə edir. Təsdiqdən sonra yalnız həmin bilet geri alınır; istifadəçinin bilet siyahısı və satış sayı/faizi canlı yenilənir. Bu əməliyyat yalnız ACTIVE mərhələsində mümkündür.
+- Bilet kodları dəyişmir və geri alınmış kod yenidən istifadə olunmur: 00001, 00002, 00003-dən 00002 geri alınarsa, növbəti verilən kod 00004 olur. Ümumi satış limitində geri alınan yer boşalır; hər lotoreya üçün ən böyük kod 99999 olaraq qalır.
+- Çarxın wheelTickets sahəsi yalnız qüvvədə olan kodları daşıyır; random seçim aktiv biletlərdən edilir. Admin və istifadəçi klientləri bu siyahını istifadə edir. Kodlar arasında boşluq olduqda düzgün çarx üçün hər iki klient yenilənməlidir.
+- Kartdakı və məlumat səhifəsinin başlığındakı zibil qutusu düyməsi lotoreyanı hər iki paneldən çıxarır. İştirakçı biletləri də daha görünmür və ana səhifədə aktiv lotoreya sayı yenilənir. DRAWING zamanı silmə qadağandır; digər mərhələlərdə təsdiqlə mümkündür.
+- SQL-də tarixçə qorunur: lottery.deleted/deleted_by/deleted_at və lottery_ticket.revoked/revoked_by/revoked_at. Mövcud ddl-auto=update bu sütunları açılışda yaradır; boolean sahələrin ilkin dəyəri false-dur.
+- Admin API: POST /api/v5/push/admin/lotteries/{id}/tickets/{code}/revoke və POST /api/v5/push/admin/lotteries/{id}/delete. Hər ikisi yalnız admin autentifikasiyası ilə işləyir.
+- Android native whitelist yeniləndiyi üçün admin tətbiqini yenidən build etmək lazımdır; tək Fast Refresh kifayət etmir. Backend deployu ayrıca edilməlidir. Bu işdə VPS-də silmə, deploy və mobil build icra edilməyib.
+- Zakaz Qrupunun lotoreya siyahısı SafeArea ilə sistem naviqasiya düymələrindən ayrılıb. Qalib səsi adminin lottery_fireworks_v2.wav faylından birbaşa kopyalanıb və Flutter-də lottery_winner_admin.wav adı ilə qoşulub. Tətbiqi tam yenidən başladın.
+
+### Əlavə yoxlamalar
+
+- 00002-ni geri alın: 00001/00003 qalsın, növbəti kod 00004 olsun; geri alınan bilet qalib seçilməsin və sahibinə nəticə bildirişi göndərilməsin.
+- Təsdiqdən imtina etdikdə əməliyyat olmasın. Eyni bileti paralel geri alma satış sayını iki dəfə azaltmasın. Adi istifadəçi revoke/delete API-lərini çağıra bilməsin.
+- Lotoreyanı silin: həm admin, həm istifadəçi siyahısından çıxsın; silinmiş lotoreyanın açıq səhifəsi serverdə 404 qaytarsın. Çarx fırlanarkən silmək mümkün olmasın.
+- Android-də 48 px alt naviqasiya sahəsi ilə son kartın aşağı hissəsi tam görünsün.

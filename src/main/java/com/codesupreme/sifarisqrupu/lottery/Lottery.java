@@ -25,4 +25,7 @@ public class Lottery {
     private long createdAt;
     private long updatedAt;
     private int notificationRound;
+    @Column(nullable=false,columnDefinition="boolean default false") private boolean deleted;
+    private Long deletedBy;
+    private Long deletedAt;
 }

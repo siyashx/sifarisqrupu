@@ -119,4 +119,71 @@ class LotteryIntegrationTest {
         assertThrows(ResponseStatusException.class,()->service.create(form(100000),1L));
         assertThrows(ResponseStatusException.class,()->service.open(id,new LotteryService.Open(false,true,0)));
     }
+    @Test void liveAndResendExposeQueueStatusAndUseDistinctEventIds() {
+        when(fcm.isEnabled()).thenReturn(true);
+        when(fcm.enqueue(anyString(),anyCollection(),anyString(),anyString(),anyMap(),anyInt(),anyString())).thenReturn(2);
+        Long id=create(3);service.issue(id,issue(7),1L);service.issue(id,issue(7),1L);service.issue(id,issue(8),1L);
+        var live=service.open(id,new LotteryService.Open(true,true,5));
+        assertEquals(2,live.notification().queued());assertEquals(2,live.notification().participants());assertTrue(live.notification().fcmEnabled());
+        assertTrue(live.createdAt()>0);
+        assertEquals(2,service.notifyParticipants(id).queued());
+        verify(fcm).enqueue(eq("ZAKAZ"),eq(new LinkedHashSet<>(List.of(7L,8L))),anyString(),anyString(),anyMap(),eq(300),eq("lottery-"+id+"-live-1"));
+        verify(fcm).enqueue(eq("ZAKAZ"),anyCollection(),anyString(),anyString(),anyMap(),eq(300),eq("lottery-"+id+"-live-2"));
+    }
+    @Test void disabledFcmIsReportedInsteadOfSilentSuccess() {
+        when(fcm.isEnabled()).thenReturn(false);
+        Long id=create(1);service.issue(id,issue(7),1L);
+        var notice=service.open(id,new LotteryService.Open(true,true,5)).notification();
+        assertEquals(0,notice.queued());assertFalse(notice.fcmEnabled());assertEquals(1,notice.participants());
+    }
+    @Test void revokedTicketLeavesOtherCodesUnchangedAndCodeIsNeverReused() {
+        Long id=create(3);service.issue(id,issue(7),1L);var request=issue(8);service.issue(id,request,1L);service.issue(id,issue(9),1L);
+        var updated=service.revokeTicket(id,"00002",42L);
+        assertEquals(2,updated.soldTickets());assertEquals(2*100.0/3,updated.soldPercent(),.001);
+        assertTrue(service.detail(id,8L,false).myTickets().isEmpty());
+        assertEquals(List.of("00001","00003"),service.ticketPage(id,0).items().stream().map(LotteryService.TicketView::code).toList());
+        assertEquals(2,service.revokeTicket(id,"00002",42L).soldTickets());
+        var revoked=tickets.findByLotteryIdAndNumber(id,2).orElseThrow();assertTrue(revoked.isRevoked());assertEquals(42L,revoked.getRevokedBy());
+        assertThrows(ResponseStatusException.class,()->service.issue(id,request,1L));
+        assertEquals(List.of("00004"),service.issue(id,issue(10),1L));assertEquals(3,service.detail(id,null,true).soldTickets());
+    }
+    @Test void wheelAndResultUseOnlyEligibleCodesAfterRevocation() {
+        Long id=create(3);service.issue(id,issue(7),1L);service.issue(id,issue(8),1L);service.issue(id,issue(9),1L);
+        service.revokeTicket(id,"00002",1L);
+        var live=service.open(id,new LotteryService.Open(false,true,5));assertEquals(List.of("00001","00003"),live.wheelTickets());
+        var drawing=service.spin(id);var row=lotteries.findById(id).orElseThrow();
+        int pointer=Math.floorMod((int)Math.floor(-drawing.finalRotation()*2/(2*Math.PI)+.5),2);
+        assertEquals(String.format("%05d",row.getWinnerNumber()),drawing.wheelTickets().get(pointer));
+        assertNotEquals(2,row.getWinnerNumber());row.setEndsAt(System.currentTimeMillis()-1);lotteries.saveAndFlush(row);service.finish(id);
+        verify(fcm,never()).enqueue(anyString(),argThat(ids->ids.contains(8L)),anyString(),anyString(),anyMap(),anyInt(),anyString());
+        assertEquals(2,service.detail(id,7L,false).wheelTickets().size());
+    }
+    @Test void revokedOnlyTicketRestoresCapacityAndNewSingleTicketKeepsItsCode() {
+        Long id=create(1);service.issue(id,issue(7),1L);service.revokeTicket(id,"00001",1L);
+        assertThrows(ResponseStatusException.class,()->service.open(id,new LotteryService.Open(false,true,5)));
+        assertEquals(List.of("00002"),service.issue(id,issue(8),1L));
+        assertEquals(List.of("00002"),service.open(id,new LotteryService.Open(false,true,5)).wheelTickets());
+    }
+    @Test void deleteHidesLotteryAndTicketsFromAllPanelsButRetainsAudit() {
+        Long id=create(2);service.issue(id,issue(7),1L);service.delete(id,42L);service.delete(id,42L);
+        assertTrue(service.list(7L,false).isEmpty());assertTrue(service.list(null,true).isEmpty());
+        assertThrows(ResponseStatusException.class,()->service.detail(id,7L,false));assertThrows(ResponseStatusException.class,()->service.detail(id,null,true));
+        assertThrows(ResponseStatusException.class,()->service.ticketPage(id,0));assertThrows(ResponseStatusException.class,()->service.issue(id,issue(8),1L));
+        var audit=lotteries.findById(id).orElseThrow();assertTrue(audit.isDeleted());assertEquals(42L,audit.getDeletedBy());assertEquals(1,tickets.count());
+    }
+    @Test void revokeStopsAtLiveAndDeletionWaitsForDrawingToFinish() {
+        Long id=create(1);service.issue(id,issue(7),1L);service.open(id,new LotteryService.Open(false,true,5));
+        assertThrows(ResponseStatusException.class,()->service.revokeTicket(id,"00001",1L));service.spin(id);
+        assertThrows(ResponseStatusException.class,()->service.delete(id,1L));
+        var row=lotteries.findById(id).orElseThrow();row.setEndsAt(System.currentTimeMillis()-1);lotteries.saveAndFlush(row);service.finish(id);
+        assertThrows(ResponseStatusException.class,()->service.revokeTicket(id,"00001",1L));service.delete(id,1L);assertTrue(service.list(null,true).isEmpty());
+    }
+    @Test void concurrentRevocationIsIdempotentAndCannotMakeSalesNegative() throws Exception {
+        Long id=create(1);service.issue(id,issue(7),1L);var pool=Executors.newFixedThreadPool(2);var start=new CountDownLatch(1);
+        try {
+            var one=pool.submit(()->{start.await();return service.revokeTicket(id,"00001",1L).soldTickets();});
+            var two=pool.submit(()->{start.await();return service.revokeTicket(id,"00001",1L).soldTickets();});start.countDown();
+            assertEquals(0,one.get(15,TimeUnit.SECONDS));assertEquals(0,two.get(15,TimeUnit.SECONDS));assertEquals(0,service.detail(id,null,true).soldTickets());
+        } finally {pool.shutdownNow();}
+    }
 }

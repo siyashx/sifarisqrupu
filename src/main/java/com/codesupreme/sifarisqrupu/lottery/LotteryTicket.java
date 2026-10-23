@@ -15,5 +15,8 @@ public class LotteryTicket {
     @Column(name="request_id",nullable=false,length=64) private String requestId;
     private Long issuedBy;
     private long createdAt;
+    @Column(nullable=false,columnDefinition="boolean default false") private boolean revoked;
+    private Long revokedBy;
+    private Long revokedAt;
     public String code() { return String.format(java.util.Locale.ROOT,"%05d",number); }
 }
