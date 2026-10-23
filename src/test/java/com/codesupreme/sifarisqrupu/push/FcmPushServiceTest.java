@@ -217,4 +217,18 @@ class FcmPushServiceTest {
         service.deliverDue();assertEquals("SENT",d.getState());verify(messaging).send(any(Message.class));
     }
 
+    @Test void zakazNewOrderSelectsCourierInstallationOfSameAccountOnly() {
+        device.setAppCode("ZAKAZ");device.setActiveRole("customer");
+        var courier=new PushDevice();courier.setId(11L);courier.setAppCode("ZAKAZ");courier.setUserId(7L);courier.setActiveRole("courier");
+        when(devices.findByAppCodeAndUserIdInAndEnabledTrue(eq("ZAKAZ"),any())).thenReturn(List.of(device,courier));
+        assertEquals(1,service.enqueue("ZAKAZ",List.of(7L),"T","B",Map.of("channel","group","groupId","0"),60,"zakaz-order"));
+        var saved=org.mockito.ArgumentCaptor.forClass(PushDelivery.class);verify(deliveries).save(saved.capture());
+        assertEquals(11L,saved.getValue().getDeviceId());
+    }
+    @Test void switchingZakazToCustomerDropsQueuedNewOrderBeforeApns() {
+        device.setAppCode("ZAKAZ");device.setActiveRole("customer");device.setPlatform("ios");
+        var d=pending();d.setAppCode("ZAKAZ");
+        d.setPayload("{\"channel\":\"group\",\"groupId\":\"0\",\"title\":\"New order\"}");
+        service.deliverDue();assertEquals("EXPIRED",d.getState());verifyNoInteractions(messaging);
+    }
 }

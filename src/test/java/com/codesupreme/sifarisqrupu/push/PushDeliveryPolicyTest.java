@@ -41,12 +41,22 @@ class PushDeliveryPolicyTest {
         assertTrue(PushDeliveryPolicy.allowsDevice(Map.of("scope","mototaxi_chat"),device));
         assertTrue(PushDeliveryPolicy.allowsDevice(Map.of("scope","mototaxi","event","new_order"),device));
     }
-    @Test void sushiDoesNotDeliverToElehberButZakazBehaviorIsPreserved() {
+    @Test void sushiDoesNotDeliverToElehberAndZakazWorkAlertsRequireNonCustomerRole() {
         var device=new PushDevice();device.setAppCode("ELEHBER");device.setActiveRole("courier");
         assertFalse(PushDeliveryPolicy.allowsDevice(Map.of("groupId","0"),device));
         device.setAppCode("ZAKAZ");device.setActiveRole("customer");
-        assertTrue(PushDeliveryPolicy.allowsDevice(Map.of("groupId","0"),device));
-        assertTrue(PushDeliveryPolicy.allowsDevice(Map.of("scope","mototaxi_chat"),device));
+        for(var data:List.of(Map.of("groupId","0"),Map.of("channel","group"),Map.of("scope","group"),
+            Map.of("scope","mototaxi_chat"),Map.of("channel","moto_chat"),Map.of("groupId","1"),
+            Map.of("scope","mototaxi","event","new_order"))) {
+            assertFalse(PushDeliveryPolicy.allowsDevice(data,device),data.toString());
+            device.setActiveRole("courier");
+            assertTrue(PushDeliveryPolicy.allowsDevice(data,device),data.toString());
+            device.setActiveRole("customer");
+        }
+        assertTrue(PushDeliveryPolicy.allowsDevice(Map.of("channel","shop","groupId","3"),device));
+        assertTrue(PushDeliveryPolicy.allowsDevice(Map.of("scope","mototaxi","channel","moto_chat","event","accepted"),device));
+        device.setActiveRole(null);
+        assertTrue(PushDeliveryPolicy.allowsDevice(Map.of("channel","group"),device));
     }
 
 }

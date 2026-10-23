@@ -58,7 +58,7 @@ public class PushController {
         }
         device.setAppCode(app);device.setInstallationId(request.installationId());device.setUserId(user.getId());
         device.setPlatform(request.platform());device.setToken(request.token());device.setEnabled(request.enabled());
-        device.setActiveRole("ELEHBER".equals(app) ? request.activeRole() : null);
+        device.setActiveRole(Set.of("ELEHBER","ZAKAZ").contains(app) ? request.activeRole() : null);
         device.setUpdatedAt(System.currentTimeMillis());devices.save(device);
         return Map.of("registered",true,"fcmEnabled",fcm.isEnabled());
     }

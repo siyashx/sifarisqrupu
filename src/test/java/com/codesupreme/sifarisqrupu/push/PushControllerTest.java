@@ -60,6 +60,15 @@ class PushControllerTest {
         assertEquals("customer",captured.getValue().getActiveRole());
         assertEquals(7L,captured.getValue().getUserId());
     }
+    @Test void zakazRegistrationAlsoStoresLocalRoleWithoutChangingCourierCapability() {
+        var user=User.builder().id(7L).userType("moto_courier").build();
+        when(auth.requireUser("valid")).thenReturn(user);
+        controller.register("valid",new PushController.DeviceRequest("ZAKAZ","installation-123456",
+            "valid-fcm-token-123456789012345","ios",true,"customer"));
+        var captured=org.mockito.ArgumentCaptor.forClass(PushDevice.class);verify(devices).save(captured.capture());
+        assertEquals("customer",captured.getValue().getActiveRole());
+        assertEquals("moto_courier",user.getUserType());
+    }
     @Test void invalidActiveRoleIsRejected() {
         assertThrows(IllegalArgumentException.class,()->controller.register("valid",new PushController.DeviceRequest(
             "ELEHBER","installation-123456","valid-fcm-token-123456789012345","ios",true,"admin")));

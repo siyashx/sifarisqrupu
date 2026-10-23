@@ -12,13 +12,18 @@ public class PushDeliveryPolicy {
     public PushDeliveryPolicy(OrderRepository orders) {this.orders=orders;}
     /** Checked both when queueing and immediately before APNs/FCM delivery. */
     public static boolean allowsDevice(Map<String,String> data, PushDevice device) {
-        if (!"ELEHBER".equals(device.getAppCode())) return true;
+        String app=device.getAppCode();
+        if (!"ELEHBER".equals(app) && !"ZAKAZ".equals(app)) return true;
+        boolean group="group".equals(data.get("channel")) || "group".equals(data.get("scope")) || "0".equals(data.get("groupId"));
         // Sushi/OrderGroup has never been part of Elehber's push audience.
-        if ("group".equals(data.get("channel")) || "group".equals(data.get("scope")) || "0".equals(data.get("groupId"))) return false;
-        if (!"customer".equals(device.getActiveRole())) return true; // legacy registrations keep their previous behavior
-        // Preserve customer ride/delivery status updates, including their moto_chat channel.
-        if ("mototaxi".equals(data.get("scope"))) return !"new_order".equals(data.get("event"));
-        return !"mototaxi_chat".equals(data.get("scope")) && !"moto_chat".equals(data.get("channel"))
+        if ("ELEHBER".equals(app) && group) return false;
+        // Legacy releases do not report a local role; preserve their delivery
+        // until updated. Current clients sync the role on login and every switch.
+        if (!"customer".equals(device.getActiveRole())) return true;
+        // Personal ride/delivery updates still reach the customer.
+        if ("mototaxi".equals(data.get("scope")) && !"new_order".equals(data.get("event"))) return true;
+        return !group && !"new_order".equals(data.get("event"))
+            && !"mototaxi_chat".equals(data.get("scope")) && !"moto_chat".equals(data.get("channel"))
             && !"1".equals(data.get("groupId"));
     }
     @Transactional(readOnly=true)
