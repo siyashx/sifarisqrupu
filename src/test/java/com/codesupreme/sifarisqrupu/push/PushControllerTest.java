@@ -9,6 +9,24 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class PushControllerTest {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"ZAKAZ","ELEHBER"})
+    void sharedShopListingNotifiesBothAppsFromEitherSource(String source) {
+        when(audience.select(anyString(),eq("shop"),eq(7L),isNull(),eq(false))).thenReturn(List.of(8L));
+        when(fcm.enqueue(anyString(),anyCollection(),anyString(),anyString(),anyMap(),anyInt(),anyString())).thenReturn(2);
+        var result=controller.send("valid",new PushController.SendRequest(source,"shop","New listing","Body",null,"listing-id"));
+        assertEquals(4,result.get("queued"));
+        for(String target:List.of("ZAKAZ","ELEHBER")) {
+            verify(fcm).enqueue(eq(target),eq(List.of(8L)),eq("New listing"),eq("Body"),argThat(d->"shop".equals(d.get("channel"))),eq(300),eq("user-7-listing-id-"+target));
+        }
+    }
+    @Test void elehberAlsoRequiresReplacementOfRejectedToken() {
+        var d=new PushDevice();d.setId(10L);d.rejectToken("invalid-fcm-token-123456789012345");
+        when(devices.findByAppCodeAndInstallationId("ELEHBER","installation-123456")).thenReturn(Optional.of(d));
+        var result=controller.register("valid",new PushController.DeviceRequest("ELEHBER","installation-123456",
+            "invalid-fcm-token-123456789012345","android",true,"customer"));
+        assertEquals(true,result.get("tokenRefreshRequired"));assertFalse(d.isEnabled());
+    }
     @Test void cachedRejectedZakazTokenCannotBeEnabledAgain() {
         var device=new PushDevice();device.setId(10L);device.setToken("invalid-fcm-token-123456789012345");
         device.rejectToken(device.getToken());device.setEnabled(false);

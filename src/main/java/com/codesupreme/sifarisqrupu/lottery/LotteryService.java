@@ -170,7 +170,8 @@ public class LotteryService {
         var participants=new LinkedHashSet<Long>();
         int page=0;Page<LotteryTicket> rows;
         do {rows=tickets.findByLotteryIdAndRevokedFalseOrderByNumber(l.getId(),PageRequest.of(page++,500));rows.forEach(t->participants.add(t.getUserId()));} while(rows.hasNext());
-        int queued=fcm.enqueue("ZAKAZ",participants,"🔴 Lotoreya hazırda keçirilir",l.getTitle()+" — Lotoreyanı canlı izləmək üçün bildiriş üzərinə klik edin.",
+        int queued=0;
+        for(String app:List.of("ZAKAZ","ELEHBER")) queued+=fcm.enqueue(app,participants,"🔴 Lotoreya hazırda keçirilir",l.getTitle()+" — Lotoreyanı canlı izləmək üçün bildiriş üzərinə klik edin.",
             Map.of("scope","lottery","channel","lottery","lotteryId",l.getId(),"event","live"),300,"lottery-"+l.getId()+"-live-"+l.getNotificationRound());
         return new Notice(queued,participants.size(),fcm.isEnabled());
     }
@@ -194,7 +195,7 @@ public class LotteryService {
                 String batch=String.join(", ",codes.subList(offset,Math.min(offset+30,codes.size())));
                 String body=won ? "Təbriklər! "+l.getTitle()+" lotoreyasında "+batch+" kodlu biletiniz qalib oldu!" :
                     l.getTitle()+": Lotoreya keçirildi. "+batch+(Math.min(offset+30,codes.size())-offset==1 ? " kodlu biletiniz" : " kodlu biletləriniz")+" təəssüf ki, qalib olmadı. Şansınızı digər lotoreyalarda yenidən yoxlaya bilərsiniz.";
-                fcm.enqueue("ZAKAZ",List.of(userId),won ? "🎉 Qalib oldunuz!" : "Lotoreyanın nəticəsi",body,
+                for(String app:List.of("ZAKAZ","ELEHBER")) fcm.enqueue(app,List.of(userId),won ? "🎉 Qalib oldunuz!" : "Lotoreyanın nəticəsi",body,
                     Map.of("scope","lottery","channel","lottery","lotteryId",id,"event",won ? "won":"lost","ticketCode",codes.get(offset),"ticketCodes",batch),86400,
                     "lottery-"+id+"-result-"+userId+"-"+(offset/30));
             }

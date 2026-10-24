@@ -27,7 +27,7 @@ public class PushAudienceService {
             .filter(u->!Boolean.TRUE.equals(u.getIsDisable()) && !muted.contains(u.getId()))
             .filter(u->restriction==null || restriction.contains(u.getId()))
             .filter(u->("shop".equals(kind) || "notice".equals(kind)) || u.getUserType()==null || !u.getUserType().toLowerCase(Locale.ROOT).contains("customer"))
-            .filter(u->"notice".equals(kind) || !"ELEHBER".equals(app) || Boolean.TRUE.equals(u.getOnline()))
+            .filter(u->"shop".equals(kind) || "notice".equals(kind) || !"ELEHBER".equals(app) || Boolean.TRUE.equals(u.getOnline()))
             // Preserve mobile Zakaz subscription filtering. Bridge historically sends to all non-muted couriers.
             .filter(u->bridge || !"ZAKAZ".equals(app) || "shop".equals(kind) ||
                 (Boolean.TRUE.equals(u.getIsSub()) && u.getExpiryDate()!=null && u.getExpiryDate().getTime()>now))

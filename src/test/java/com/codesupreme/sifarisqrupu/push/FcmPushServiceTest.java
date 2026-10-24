@@ -85,6 +85,8 @@ class FcmPushServiceTest {
         "ZAKAZ, unknown, , chime.caf",
         "ELEHBER, moto_chat, , notifysound.caf",
         "ELEHBER, shop, , chime.caf",
+        "ELEHBER, lottery, lottery, chime.caf",
+        "ZAKAZ, lottery, lottery, chime.caf",
         "ELEHBER, , mototaxi, notifysound.caf",
         "ELEHBER, , mototaxi_chat, notifysound.caf",
         "ELEHBER, , , notifysound.caf",

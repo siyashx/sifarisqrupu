@@ -98,6 +98,7 @@ class LotteryIntegrationTest {
         var row=lotteries.findById(id).orElseThrow();row.setEndsAt(System.currentTimeMillis()-1);lotteries.saveAndFlush(row);
         service.finish(id);
         verify(fcm,times(1)).enqueue(eq("ZAKAZ"),eq(List.of(7L)),eq("🎉 Qalib oldunuz!"),anyString(),argThat(m->"won".equals(m.get("event"))),eq(86400),anyString());
+        verify(fcm,times(1)).enqueue(eq("ELEHBER"),eq(List.of(7L)),eq("🎉 Qalib oldunuz!"),anyString(),argThat(m->"won".equals(m.get("event"))),eq(86400),anyString());
     }
     @Test void losingParticipantReceivesTheirCodesTogether() {
         Long id=create(3);service.issue(id,issue(7),1L);service.issue(id,issue(8),1L);service.issue(id,issue(8),1L);
@@ -105,6 +106,7 @@ class LotteryIntegrationTest {
         var row=lotteries.findById(id).orElseThrow();row.setWinnerNumber(1);row.setEndsAt(System.currentTimeMillis()-1);lotteries.saveAndFlush(row);
         service.finish(id);
         verify(fcm,times(1)).enqueue(eq("ZAKAZ"),eq(List.of(8L)),eq("Lotoreyanın nəticəsi"),contains("00002, 00003"),argThat(m->"lost".equals(m.get("event"))),eq(86400),anyString());
+        verify(fcm,times(1)).enqueue(eq("ELEHBER"),eq(List.of(8L)),eq("Lotoreyanın nəticəsi"),contains("00002, 00003"),argThat(m->"lost".equals(m.get("event"))),eq(86400),anyString());
         verify(fcm,times(2)).enqueue(eq("ZAKAZ"),anyCollection(),anyString(),anyString(),anyMap(),eq(86400),anyString());
     }
     @Test void privateTicketsDoNotLeakToOtherUsers() {
@@ -124,11 +126,13 @@ class LotteryIntegrationTest {
         when(fcm.enqueue(anyString(),anyCollection(),anyString(),anyString(),anyMap(),anyInt(),anyString())).thenReturn(2);
         Long id=create(3);service.issue(id,issue(7),1L);service.issue(id,issue(7),1L);service.issue(id,issue(8),1L);
         var live=service.open(id,new LotteryService.Open(true,true,5));
-        assertEquals(2,live.notification().queued());assertEquals(2,live.notification().participants());assertTrue(live.notification().fcmEnabled());
+        assertEquals(4,live.notification().queued());assertEquals(2,live.notification().participants());assertTrue(live.notification().fcmEnabled());
         assertTrue(live.createdAt()>0);
-        assertEquals(2,service.notifyParticipants(id).queued());
+        assertEquals(4,service.notifyParticipants(id).queued());
         verify(fcm).enqueue(eq("ZAKAZ"),eq(new LinkedHashSet<>(List.of(7L,8L))),anyString(),anyString(),anyMap(),eq(300),eq("lottery-"+id+"-live-1"));
         verify(fcm).enqueue(eq("ZAKAZ"),anyCollection(),anyString(),anyString(),anyMap(),eq(300),eq("lottery-"+id+"-live-2"));
+        verify(fcm).enqueue(eq("ELEHBER"),eq(new LinkedHashSet<>(List.of(7L,8L))),anyString(),anyString(),anyMap(),eq(300),eq("lottery-"+id+"-live-1"));
+        verify(fcm).enqueue(eq("ELEHBER"),anyCollection(),anyString(),anyString(),anyMap(),eq(300),eq("lottery-"+id+"-live-2"));
     }
     @Test void disabledFcmIsReportedInsteadOfSilentSuccess() {
         when(fcm.isEnabled()).thenReturn(false);

@@ -54,8 +54,8 @@ public class PushController {
             throw new IllegalArgumentException("Invalid active role");
         PushDevice device=devices.findByAppCodeAndInstallationId(app,request.installationId()).orElseGet(PushDevice::new);
         var sameTokenDevices=devices.findByAppCodeAndToken(app,request.token());
-        boolean refreshRequired="ZAKAZ".equals(app) && (device.isRejectedToken(request.token()) ||
-            sameTokenDevices.stream().anyMatch(d->d.isRejectedToken(request.token())));
+        boolean refreshRequired=device.isRejectedToken(request.token()) ||
+            sameTokenDevices.stream().anyMatch(d->d.isRejectedToken(request.token()));
         for(PushDevice other:sameTokenDevices) {
             if(!Objects.equals(other.getId(),device.getId())) {other.setEnabled(false);devices.save(other);}
         }
@@ -82,13 +82,16 @@ public class PushController {
         String app=FcmPushService.app(request.appCode());
         String kind=request.kind();
         if(kind==null || !Set.of("group","shop","moto_chat","notice").contains(kind) ||
-            ("ELEHBER".equals(app) && !"moto_chat".equals(kind) && !"notice".equals(kind))) throw new IllegalArgumentException("Invalid notification kind");
+            ("ELEHBER".equals(app) && !Set.of("moto_chat","notice","shop").contains(kind))) throw new IllegalArgumentException("Invalid notification kind");
         if("notice".equals(kind) && (request.userIds()==null || request.userIds().isEmpty())) throw new IllegalArgumentException("notice recipients required");
         String title=limit(request.title(),120), body=limit(request.body(),550);
         if(body.isBlank()) throw new IllegalArgumentException("body is required");
         String id=requestId(request.requestId(),"user-"+user.getId());
-        int count=fcm.enqueue(app,audience.select(app,kind,user.getId(),request.userIds(),false),title,body,
-            PushAudienceService.payload(app,kind),300,id+"-"+app);
+        int count=0;
+        for(String target: "shop".equals(kind) ? List.of("ZAKAZ","ELEHBER") : List.of(app)) {
+            count+=fcm.enqueue(target,audience.select(target,kind,user.getId(),request.userIds(),false),title,body,
+                PushAudienceService.payload(target,kind),300,id+"-"+target);
+        }
         return Map.of("queued",count);
     }
     @PostMapping("/chat")
