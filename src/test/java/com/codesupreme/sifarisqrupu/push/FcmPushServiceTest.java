@@ -20,6 +20,7 @@ class FcmPushServiceTest {
     FcmPushService service;
     FirebaseMessaging messaging;
     PushDevice device;
+    @AfterEach void closeExecutor() {service.close();}
     @BeforeEach void setup() {
         devices=mock(PushDeviceRepository.class);deliveries=mock(PushDeliveryRepository.class);users=mock(UserRepository.class);
         policy=mock(PushDeliveryPolicy.class);messaging=mock(FirebaseMessaging.class);
@@ -30,7 +31,7 @@ class FcmPushServiceTest {
         when(devices.findByAppCodeAndUserIdInAndEnabledTrue(eq("ELEHBER"),any())).thenReturn(List.of(device));
         when(devices.findById(10L)).thenReturn(Optional.of(device));
         when(users.findById(7L)).thenReturn(Optional.of(User.builder().id(7L).isDisable(false).build()));
-        when(policy.allows(anyMap(),anyLong())).thenReturn(true);
+        when(policy.allows(anyMap(),anyLong(),anyString())).thenReturn(true);
     }
     PushDelivery pending() {
         PushDelivery d=new PushDelivery();d.setId(1L);d.setAppCode("ELEHBER");d.setUserId(7L);d.setDeviceId(10L);
@@ -67,12 +68,57 @@ class FcmPushServiceTest {
         var d=pending();device.setEnabled(false);service.deliverDue();assertEquals("EXPIRED",d.getState());verifyNoInteractions(messaging);
     }
     @Test void staleOfferDoesNotSoundAfterOrderTaken() {
-        var d=pending();when(policy.allows(anyMap(),anyLong())).thenReturn(false);
+        var d=pending();when(policy.allows(anyMap(),anyLong(),anyString())).thenReturn(false);
         service.deliverDue();assertEquals("EXPIRED",d.getState());verifyNoInteractions(messaging);
     }
     @Test void successfulDeliveryIsRecorded() throws Exception {
         var d=pending();when(messaging.send(any(Message.class))).thenReturn("message-id");
         service.deliverDue();assertEquals("SENT",d.getState());verify(messaging).send(any(Message.class));
+    }
+    @Test void databaseFetchOutageLeavesQueueUntouchedAndNextPassRecovers() throws Exception {
+        var d=pending();
+        when(deliveries.findTop100ByStateAndNextAttemptAtLessThanEqualOrderByIdAsc(eq("PENDING"),anyLong()))
+            .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("database reset"))
+            .thenReturn(List.of(d));
+        service.deliverDue();
+        assertEquals("PENDING",d.getState());assertEquals(0,d.getAttempts());
+        verifyNoInteractions(messaging);verify(deliveries,never()).save(any());
+        service.deliverDue();assertEquals("SENT",d.getState());verify(messaging).send(any(Message.class));
+    }
+    @Test void databaseFailureForOneDeviceDoesNotAbortOtherDeliveries() throws Exception {
+        var broken=pending();broken.setDeviceId(11L);
+        var healthy=new PushDelivery();healthy.setId(2L);healthy.setAppCode("ELEHBER");healthy.setUserId(7L);healthy.setDeviceId(10L);
+        healthy.setState("PENDING");healthy.setExpiresAt(System.currentTimeMillis()+60000);healthy.setPayload("{}");
+        when(devices.findById(11L)).thenThrow(new org.springframework.dao.DataAccessResourceFailureException("database reset"));
+        when(deliveries.findTop100ByStateAndNextAttemptAtLessThanEqualOrderByIdAsc(eq("PENDING"),anyLong())).thenReturn(List.of(broken,healthy));
+        service.deliverDue();
+        assertEquals("PENDING",broken.getState());assertEquals(0,broken.getAttempts());
+        assertEquals("SENT",healthy.getState());verify(messaging,times(1)).send(any(Message.class));
+    }
+    @Test void databasePolicyFailureNeverConsumesFirebaseRetryBudget() throws Exception {
+        var d=pending();d.setAttempts(7);
+        when(policy.allows(anyMap(),anyLong(),anyString()))
+            .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("database reset"))
+            .thenReturn(true);
+        service.deliverDue();
+        assertEquals("PENDING",d.getState());assertEquals(7,d.getAttempts());
+        verifyNoInteractions(messaging);verify(deliveries,never()).save(any());
+        service.deliverDue();assertEquals("SENT",d.getState());verify(messaging).send(any(Message.class));
+    }
+    @Test void connectionPoolTransactionFailureDoesNotExhaustDeliveryAndRecovers() throws Exception {
+        var d=pending();d.setAttempts(7);
+        when(policy.allows(anyMap(),anyLong(),anyString()))
+            .thenThrow(new org.springframework.transaction.CannotCreateTransactionException("Could not open JPA EntityManager"))
+            .thenReturn(true);
+        service.deliverDue();
+        assertEquals("PENDING",d.getState());assertEquals(7,d.getAttempts());
+        verifyNoInteractions(messaging);
+        service.deliverDue();assertEquals("SENT",d.getState());verify(messaging).send(any(Message.class));
+    }
+    @Test void skippedLotteryRecordsWhyItWasNotSentWithoutLoggingPrivateData() {
+        var d=pending();d.setEventId("lottery-42-live-1");d.setExpiresAt(1L);
+        service.deliverDue();assertEquals("EXPIRED",d.getState());assertEquals("TTL_EXPIRED",d.getLastError());
+        verifyNoInteractions(messaging);
     }
     @ParameterizedTest
     @CsvSource({

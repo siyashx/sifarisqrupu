@@ -19,6 +19,7 @@ import java.util.*;
 
 @Service
 public class LotteryService {
+    private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(LotteryService.class);
     private final LotteryRepository lotteries;
     private final LotteryTicketRepository tickets;
     private final UserRepository users;
@@ -52,6 +53,16 @@ public class LotteryService {
     private static boolean early(Lottery l) {return LocalDate.now(BAKU).isBefore(Instant.ofEpochMilli(l.getDrawAt()).atZone(BAKU).toLocalDate());}
     private static Person person(User u) {return new Person(u.getId(),Objects.toString(u.getName(),"İstifadəçi"),Objects.toString(u.getPhoneNumber(),""));}
     private static String code(int value) {return String.format(Locale.ROOT,"%05d",value);}
+    private void pushQueued(Long lotteryId,String event,int targets,int participants) {
+        Runnable report=()->{
+            if(targets==0) log.warn("Lottery push has no targets. lotteryId={}, event={}, participants={}, fcmEnabled={}",lotteryId,event,participants,fcm.isEnabled());
+            else log.info("Lottery push queued. lotteryId={}, event={}, targets={}, participants={}",lotteryId,event,targets,participants);
+        };
+        // Do not report a successful queue operation if its transaction rolls back.
+        if(TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCommit(){report.run();}});
+        } else report.run();
+    }
     private void change(Lottery l) {
         l.setUpdatedAt(System.currentTimeMillis());lotteries.saveAndFlush(l);
         // Broadcast invalidation only. Never publish personal tickets or phone numbers.
@@ -198,6 +209,7 @@ public class LotteryService {
             l.getTitle()+" — Lotoreya ilə tanış olmaq üçün bildirişə toxunun.",
             Map.of("scope","lottery","channel","lottery","lotteryId",l.getId(),"event","created"),86400,
             event);
+        pushQueued(id,"created",queued,recipients.size());
         return new Notice(queued,recipients.size(),fcm.isEnabled());
     }
     private Notice notifyLocked(Lottery l) {
@@ -208,6 +220,7 @@ public class LotteryService {
         int queued=0;
         for(String app:List.of("ZAKAZ","ELEHBER")) queued+=fcm.enqueue(app,participants,"🔴 Lotoreya hazırda keçirilir",l.getTitle()+" — Lotoreyanı canlı izləmək üçün bildiriş üzərinə klik edin.",
             Map.of("scope","lottery","channel","lottery","lotteryId",l.getId(),"event","live"),300,"lottery-"+l.getId()+"-live-"+l.getNotificationRound());
+        pushQueued(l.getId(),"live",queued,participants.size());
         return new Notice(queued,participants.size(),fcm.isEnabled());
     }
     @Transactional public void finish(Long id) {
@@ -223,6 +236,7 @@ public class LotteryService {
             rows=tickets.findByLotteryIdAndRevokedFalseOrderByNumber(id,PageRequest.of(page++,500));
             rows.forEach(t->participants.computeIfAbsent(t.getUserId(),ignored->new ArrayList<>()).add(t.code()));
         } while(rows.hasNext());
+        int queued=0,winnerTargets=0;
         for(var participant:participants.entrySet()) {
             Long userId=participant.getKey();boolean won=Objects.equals(userId,winner.getUserId());
             var codes=won ? List.of(winner.code()) : participant.getValue();
@@ -230,11 +244,16 @@ public class LotteryService {
                 String batch=String.join(", ",codes.subList(offset,Math.min(offset+30,codes.size())));
                 String body=won ? "Təbriklər! "+l.getTitle()+" lotoreyasında "+batch+" kodlu biletiniz qalib oldu!" :
                     l.getTitle()+": Lotoreya keçirildi. "+batch+(Math.min(offset+30,codes.size())-offset==1 ? " kodlu biletiniz" : " kodlu biletləriniz")+" təəssüf ki, qalib olmadı. Şansınızı digər lotoreyalarda yenidən yoxlaya bilərsiniz.";
-                for(String app:List.of("ZAKAZ","ELEHBER")) fcm.enqueue(app,List.of(userId),won ? "🎉 Qalib oldunuz!" : "Lotoreyanın nəticəsi",body,
+                for(String app:List.of("ZAKAZ","ELEHBER")) {
+                    int targets=fcm.enqueue(app,List.of(userId),won ? "🎉 Qalib oldunuz!" : "Lotoreyanın nəticəsi",body,
                     Map.of("scope","lottery","channel","lottery","lotteryId",id,"event",won ? "won":"lost","ticketCode",codes.get(offset),"ticketCodes",batch),86400,
                     "lottery-"+id+"-result-"+userId+"-"+(offset/30));
+                    queued+=targets;if(won) winnerTargets+=targets;
+                }
             }
         }
+        pushQueued(id,"result",queued,participants.size());
+        pushQueued(id,"won",winnerTargets,1);
     }
     @Transactional(readOnly=true) public PageView<Person> people(String query,int page) {
         var result=directory.search(clean(query).toLowerCase(Locale.ROOT),PageRequest.of(Math.max(0,page),50));

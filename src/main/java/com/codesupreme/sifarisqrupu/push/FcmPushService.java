@@ -14,8 +14,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.TransactionException;
+import org.springframework.core.NestedRuntimeException;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
@@ -31,6 +36,8 @@ public class FcmPushService {
     private final boolean enabled;
     private final String projectId;
     private FirebaseMessaging messaging;
+    private final AtomicBoolean databaseUnavailable=new AtomicBoolean();
+    private final AtomicLong nextDatabaseWarningAt=new AtomicLong();
     private final ExecutorService sendExecutor=Executors.newFixedThreadPool(16,task->{
         Thread t=new Thread(task,"fcm-delivery");t.setDaemon(true);return t;
     });
@@ -100,9 +107,42 @@ public class FcmPushService {
     @Scheduled(fixedDelayString="${push.fcm.worker-delay-ms:1000}",scheduler="pushTaskScheduler")
     public void deliverDue() {
         if(!enabled) return;
-        var batch=deliveries.findTop100ByStateAndNextAttemptAtLessThanEqualOrderByIdAsc("PENDING",System.currentTimeMillis());
-        CompletableFuture.allOf(batch.stream().map(delivery->CompletableFuture.runAsync(()->deliverOne(delivery),sendExecutor))
+        final List<PushDelivery> batch;
+        try {
+            batch=deliveries.findTop100ByStateAndNextAttemptAtLessThanEqualOrderByIdAsc("PENDING",System.currentTimeMillis());
+        } catch(DataAccessException | TransactionException error) {
+            databaseFailure("fetch",error);return;
+        }
+        var batchDatabaseFailure=new AtomicBoolean();
+        CompletableFuture.allOf(batch.stream().map(delivery->CompletableFuture.runAsync(()->{
+            try {deliverOne(delivery);}
+            catch(DataAccessException | TransactionException error) {
+                // Keep the durable row pending. A database outage is not a
+                // Firebase failure and must never exhaust its retry budget.
+                batchDatabaseFailure.set(true);databaseFailure("delivery",error);
+            }
+        },sendExecutor))
             .toArray(CompletableFuture[]::new)).join();
+        if(!batchDatabaseFailure.get() && databaseUnavailable.compareAndSet(true,false)) {
+            nextDatabaseWarningAt.set(0);
+            log.info("FCM database recovered. Pending delivery processing resumed.");
+        }
+    }
+    private void databaseFailure(String stage,NestedRuntimeException error) {
+        databaseUnavailable.set(true);
+        long now=System.currentTimeMillis(),next=nextDatabaseWarningAt.get();
+        if(now>=next && nextDatabaseWarningAt.compareAndSet(next,now+60000)) {
+            log.warn("FCM database unavailable. stage={}, cause={}. Pending deliveries retained for retry.",
+                stage,error.getMostSpecificCause().getClass().getSimpleName());
+        }
+    }
+    private void expire(PushDelivery delivery,String reason) {
+        delivery.setState("EXPIRED");delivery.setLastError(reason);deliveries.save(delivery);
+        if(isLottery(delivery)) log.info("FCM lottery skipped. eventId={}, deliveryId={}, app={}, deviceId={}, reason={}",
+            delivery.getEventId(),delivery.getId(),delivery.getAppCode(),delivery.getDeviceId(),reason);
+    }
+    private static boolean isLottery(PushDelivery delivery) {
+        return delivery.getEventId()!=null && delivery.getEventId().startsWith("lottery-");
     }
     private void deliverOne(PushDelivery delivery) {
             long now=System.currentTimeMillis();
@@ -110,14 +150,14 @@ public class FcmPushService {
             boolean userActive="ADMIN".equals(delivery.getAppCode())
                 ? admins.findById(delivery.getUserId()).map(a->!Boolean.TRUE.equals(a.getIsDisable()) && !Boolean.TRUE.equals(a.getIsMutedNotifications())).orElse(false)
                 : users.findById(delivery.getUserId()).map(u->!Boolean.TRUE.equals(u.getIsDisable())).orElse(false);
-            if(delivery.getExpiresAt()<=now || device==null || !device.isEnabled() || !userActive ||
-                !Objects.equals(device.getUserId(),delivery.getUserId()) || !Objects.equals(device.getAppCode(),delivery.getAppCode())) {
-                delivery.setState("EXPIRED"); deliveries.save(delivery); return;
-            }
+            String ineligible=delivery.getExpiresAt()<=now ? "TTL_EXPIRED" : device==null ? "DEVICE_MISSING" :
+                !device.isEnabled() ? "DEVICE_DISABLED" : !userActive ? "ACCOUNT_DISABLED" :
+                !Objects.equals(device.getUserId(),delivery.getUserId()) || !Objects.equals(device.getAppCode(),delivery.getAppCode()) ? "DEVICE_ACCOUNT_CHANGED" : null;
+            if(ineligible!=null) {expire(delivery,ineligible);return;}
             try {
                 Map<String,String> data=json.readValue(delivery.getPayload(),new TypeReference<Map<String,String>>(){});
-                if(!PushDeliveryPolicy.allowsDevice(data,device) || !policy.allows(data,delivery.getUserId())) {
-                    delivery.setState("EXPIRED"); deliveries.save(delivery); return;
+                if(!PushDeliveryPolicy.allowsDevice(data,device) || !policy.allows(data,delivery.getUserId(),delivery.getAppCode())) {
+                    expire(delivery,"POLICY_REJECTED");return;
                 }
                 long remaining=delivery.getExpiresAt()-now;
                 Message.Builder message=Message.builder().setToken(device.getToken()).putAllData(data)
@@ -134,6 +174,8 @@ public class FcmPushService {
                 }
                 messaging().send(message.build());
                 delivery.setState("SENT"); delivery.setLastError(null);
+            } catch(DataAccessException | TransactionException error) {
+                throw error;
             } catch(Exception error) {
                 MessagingErrorCode code=error instanceof FirebaseMessagingException ? ((FirebaseMessagingException)error).getMessagingErrorCode() : null;
                 delivery.setLastError(code==null ? error.getClass().getSimpleName() : code.name());
@@ -158,11 +200,18 @@ public class FcmPushService {
                     delivery.setNextAttemptAt(now+delay);
                     if(delivery.getAttempts()>=8) delivery.setState("FAILED");
                 }
-                log.warn("FCM delivery failed. deliveryId={}, app={}, platform={}, deviceId={}, code={}, state={}, reason={}",
+                log.warn("FCM delivery failed. deliveryId={}, app={}, platform={}, deviceId={}, code={}, state={}, eventId={}, reason={}",
                     delivery.getId(),delivery.getAppCode(),device.getPlatform(),device.getId(),
-                    delivery.getLastError(),delivery.getState(),safeFailureReason(error,device,delivery));
+                    delivery.getLastError(),delivery.getState(),delivery.getEventId(),safeFailureReason(error,device,delivery));
             }
             deliveries.save(delivery);
+            // Firebase acceptance is distinct from receipt/display on a phone.
+            // Created broadcasts can have thousands of rows: log the time-
+            // sensitive invitation/result path, without tokens or message text.
+            if("SENT".equals(delivery.getState()) && isLottery(delivery) && !delivery.getEventId().contains("-created-")) {
+                log.info("FCM lottery accepted. eventId={}, deliveryId={}, app={}, platform={}, deviceId={}",
+                    delivery.getEventId(),delivery.getId(),delivery.getAppCode(),device.getPlatform(),device.getId());
+            }
     }
 
     private static String iosSound(String appCode, Map<String,String> data) {

@@ -37,7 +37,10 @@ public class PushAudienceService {
         return switch(kind) {
             case "shop" -> Map.of("screen","ShopGroup","groupId",3,"channel","shop");
             case "group" -> Map.of("screen","OrderGroup","groupId",0,"channel","group");
-            case "notice", "moto_chat" -> Map.of("screen","ELEHBER".equals(app) ? "MotoTaksiChat":"MotoTaksi",
+            case "notice" -> Map.of("screen","ELEHBER".equals(app) ? "MotoTaksiChat":"MotoTaksi",
+                "scope","mototaxi_chat","groupId",1,"channel","moto_chat","event","notice",
+                "route","ELEHBER".equals(app) ? "/moto-taksi-chat":"/moto-taksi");
+            case "moto_chat" -> Map.of("screen","ELEHBER".equals(app) ? "MotoTaksiChat":"MotoTaksi",
                 "scope","mototaxi_chat","groupId",1,"channel","moto_chat",
                 "route","ELEHBER".equals(app) ? "/moto-taksi-chat":"/moto-taksi");
             default -> throw new IllegalArgumentException("Unsupported notification kind");

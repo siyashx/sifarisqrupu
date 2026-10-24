@@ -124,6 +124,21 @@ class LotteryIntegrationTest {
         verify(fcm,times(1)).enqueue(eq("ZAKAZ"),eq(List.of(7L)),eq("🎉 Qalib oldunuz!"),anyString(),argThat(m->"won".equals(m.get("event"))),eq(86400),anyString());
         verify(fcm,times(1)).enqueue(eq("ELEHBER"),eq(List.of(7L)),eq("🎉 Qalib oldunuz!"),anyString(),argThat(m->"won".equals(m.get("event"))),eq(86400),anyString());
     }
+    @Test void databaseFailureRollsBackCompletionAndResultsAreRetriedTogether() {
+        Long id=create(1);service.issue(id,issue(7),1L);
+        service.open(id,new LotteryService.Open(false,true,5));service.spin(id);
+        var row=lotteries.findById(id).orElseThrow();row.setEndsAt(System.currentTimeMillis()-1);lotteries.saveAndFlush(row);
+        when(fcm.enqueue(anyString(),anyCollection(),anyString(),anyString(),anyMap(),anyInt(),anyString()))
+            .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("database reset"))
+            .thenReturn(1);
+        assertThrows(org.springframework.dao.DataAccessResourceFailureException.class,()->service.finish(id));
+        assertEquals("DRAWING",lotteries.findById(id).orElseThrow().getStatus());
+        service.finish(id);service.finish(id);
+        assertEquals("COMPLETED",lotteries.findById(id).orElseThrow().getStatus());
+        // First ZAKAZ attempt rolled back; the successful retry includes both apps.
+        verify(fcm,times(2)).enqueue(eq("ZAKAZ"),anyCollection(),anyString(),anyString(),anyMap(),anyInt(),anyString());
+        verify(fcm,times(1)).enqueue(eq("ELEHBER"),anyCollection(),anyString(),anyString(),anyMap(),anyInt(),anyString());
+    }
     @Test void losingParticipantReceivesTheirCodesTogether() {
         Long id=create(3);service.issue(id,issue(7),1L);service.issue(id,issue(8),1L);service.issue(id,issue(8),1L);
         service.open(id,new LotteryService.Open(false,true,5));service.spin(id);

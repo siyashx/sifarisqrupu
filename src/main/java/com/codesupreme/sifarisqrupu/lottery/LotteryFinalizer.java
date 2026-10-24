@@ -11,7 +11,12 @@ public class LotteryFinalizer {
     public void finishDue() {
         for(var l:repository.findByStatusAndEndsAtLessThanEqual("DRAWING",System.currentTimeMillis())) {
             try {service.finish(l.getId());}
-            catch(RuntimeException error){LoggerFactory.getLogger(getClass()).error("Lottery {} finalization pending retry",l.getId());}
+            catch(RuntimeException error){
+                // Transaction rolls back both completion and result pushes;
+                // next scheduled pass retries the same lottery atomically.
+                Throwable cause=error;while(cause.getCause()!=null && cause.getCause()!=cause) cause=cause.getCause();
+                LoggerFactory.getLogger(getClass()).error("Lottery {} finalization pending retry. cause={}",l.getId(),cause.getClass().getSimpleName());
+            }
         }
     }
 }

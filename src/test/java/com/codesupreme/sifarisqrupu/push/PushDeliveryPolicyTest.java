@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 class PushDeliveryPolicyTest {
     @Test void requiresLiveCourierOfferAndOpenOrder() {
-        var repo=mock(OrderRepository.class);var policy=new PushDeliveryPolicy(repo);
+        var repo=mock(OrderRepository.class);var policy=new PushDeliveryPolicy(repo,mock(com.codesupreme.sifarisqrupu.dao.user.UserRepository.class),mock(com.codesupreme.sifarisqrupu.service.impl.notification_mute.NotificationMutePreferenceService.class));
         var order=Order.builder().id(42L).status("no_courier").activeOfferExpirations(Map.of(7L,new Date(System.currentTimeMillis()+60000))).build();
         when(repo.findById(42L)).thenReturn(Optional.of(order));
         var data=Map.of("scope","mototaxi","event","new_order","orderId","42");
@@ -16,12 +16,12 @@ class PushDeliveryPolicyTest {
         order.setStatus("no_courier");order.setIsDisable(true);assertFalse(policy.allows(data,7L));
     }
     @Test void controlsStillDeliverForClosedOrders() {
-        var repo=mock(OrderRepository.class);var policy=new PushDeliveryPolicy(repo);
+        var repo=mock(OrderRepository.class);var policy=new PushDeliveryPolicy(repo,mock(com.codesupreme.sifarisqrupu.dao.user.UserRepository.class),mock(com.codesupreme.sifarisqrupu.service.impl.notification_mute.NotificationMutePreferenceService.class));
         assertTrue(policy.allows(Map.of("scope","mototaxi","event","customer_cancelled"),7L));
         verifyNoInteractions(repo);
     }
     @Test void ownOfferIsRejectedEvenForACourierCapableAccountAndLegacyOffer() {
-        var repo=mock(OrderRepository.class);var policy=new PushDeliveryPolicy(repo);
+        var repo=mock(OrderRepository.class);var policy=new PushDeliveryPolicy(repo,mock(com.codesupreme.sifarisqrupu.dao.user.UserRepository.class),mock(com.codesupreme.sifarisqrupu.service.impl.notification_mute.NotificationMutePreferenceService.class));
         var order=Order.builder().id(42L).customerId(7L).status("no_courier")
             .activeOfferExpirations(Map.of(7L,new Date(System.currentTimeMillis()+60000)))
             .offeredCourierId(7L).offerExpiresAt(new Date(System.currentTimeMillis()+60000)).build();
