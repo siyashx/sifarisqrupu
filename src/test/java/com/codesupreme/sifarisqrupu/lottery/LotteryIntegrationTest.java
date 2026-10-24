@@ -43,6 +43,21 @@ class LotteryIntegrationTest {
     LotteryService.Form form(int total) {return new LotteryService.Form("Hədiyyə","","https://example.test/image.jpg",System.currentTimeMillis()+86400000,new BigDecimal("2.50"),total);}
     Long create(int total) {return service.create(form(total),1L).id();}
     LotteryService.Issue issue(long user) {return new LotteryService.Issue(List.of(user),UUID.randomUUID().toString());}
+    @Test void announcementIncludesCustomersWithoutTicketsAndEachResendHasANewEvent() {
+        when(users.findAll()).thenReturn(List.of(
+            User.builder().id(7L).userType("customer").isDisable(false).online(false).isSub(false).build(),
+            User.builder().id(8L).userType("courier").isDisable(false).build(),
+            User.builder().id(9L).isDisable(true).build()));
+        Long id=create(3);
+        service.announce(id);service.announce(id);
+        for(String app:List.of("ZAKAZ","ELEHBER")) {
+            verify(fcm).enqueue(eq(app),eq(List.of(7L,8L)),anyString(),anyString(),
+                argThat(m->"created".equals(m.get("event")) && "lottery".equals(m.get("scope"))),eq(86400),eq("lottery-"+id+"-created-1"));
+            verify(fcm).enqueue(eq(app),eq(List.of(7L,8L)),anyString(),anyString(),anyMap(),eq(86400),eq("lottery-"+id+"-created-2"));
+        }
+        service.cancel(id);
+        assertThrows(ResponseStatusException.class,()->service.announce(id));
+    }
     @Test void sequentialTicketsAndRetryDoNotDoubleIssue() {
         Long id=create(3);var request=issue(7);
         assertEquals(List.of("00001"),service.issue(id,request,1L));

@@ -165,6 +165,19 @@ public class LotteryService {
     @Transactional public Notice notifyParticipants(Long id) {
         var l=locked(id);require(Set.of("LIVE","DRAWING").contains(l.getStatus()),"Lotoreya hazırda canlı deyil.");return notifyLocked(l);
     }
+    /** Admin-confirmed announcement, including customers without tickets or subscriptions. */
+    @Transactional public Notice announce(Long id) {
+        var l=locked(id);require("ACTIVE".equals(l.getStatus()),"Yeni lotoreya elanı yalnız aktiv lotoreya üçün göndərilə bilər.");
+        var recipients=users.findAll().stream().filter(u->u.getId()!=null && !Boolean.TRUE.equals(u.getIsDisable()))
+            .map(User::getId).distinct().toList();
+        l.setNotificationRound(l.getNotificationRound()+1);lotteries.save(l);
+        int queued=0;
+        for(String app:List.of("ZAKAZ","ELEHBER")) queued+=fcm.enqueue(app,recipients,"🎟️ Yeni lotoreya!",
+            l.getTitle()+" — Lotoreya ilə tanış olmaq üçün bildirişə toxunun.",
+            Map.of("scope","lottery","channel","lottery","lotteryId",l.getId(),"event","created"),86400,
+            "lottery-"+l.getId()+"-created-"+l.getNotificationRound());
+        return new Notice(queued,recipients.size(),fcm.isEnabled());
+    }
     private Notice notifyLocked(Lottery l) {
         l.setNotificationRound(l.getNotificationRound()+1);lotteries.save(l);
         var participants=new LinkedHashSet<Long>();

@@ -76,28 +76,37 @@ class FcmPushServiceTest {
     }
     @ParameterizedTest
     @CsvSource({
-        "ZAKAZ, group, mototaxi, chime.caf",
-        "ZAKAZ, shop, , chime.caf",
-        "ZAKAZ, moto_chat, , notifysound.caf",
-        "ZAKAZ, , mototaxi, notifysound.caf",
-        "ZAKAZ, , mototaxi_chat, notifysound.caf",
-        "ZAKAZ, , , chime.caf",
-        "ZAKAZ, unknown, , chime.caf",
-        "ELEHBER, moto_chat, , notifysound.caf",
-        "ELEHBER, shop, , chime.caf",
-        "ELEHBER, lottery, lottery, chime.caf",
-        "ZAKAZ, lottery, lottery, chime.caf",
-        "ELEHBER, , mototaxi, notifysound.caf",
-        "ELEHBER, , mototaxi_chat, notifysound.caf",
-        "ELEHBER, , , notifysound.caf",
-        "ELEHBER, unknown, , notifysound.caf"
+        "ZAKAZ, group, mototaxi, , chime.caf",
+        "ZAKAZ, shop, , , chime.caf",
+        "ZAKAZ, moto_chat, , , notifysound.caf",
+        "ZAKAZ, , mototaxi, , notifysound.caf",
+        "ZAKAZ, , mototaxi_chat, , notifysound.caf",
+        "ZAKAZ, , , , chime.caf",
+        "ZAKAZ, unknown, , , chime.caf",
+        "ELEHBER, moto_chat, , , notifysound.caf",
+        "ELEHBER, shop, , , chime.caf",
+        "ELEHBER, lottery, lottery, , chime.caf",
+        "ZAKAZ, lottery, lottery, , chime.caf",
+        "ELEHBER, , mototaxi, , notifysound.caf",
+        "ELEHBER, , mototaxi_chat, , notifysound.caf",
+        "ELEHBER, , , , notifysound.caf",
+        "ELEHBER, unknown, , , notifysound.caf",
+        "ELEHBER, lottery, lottery, live, lottery_live.caf",
+        "ZAKAZ, lottery, lottery, live, lottery_live.caf",
+        "ELEHBER, , lottery, live, lottery_live.caf",
+        "ZAKAZ, , lottery, live, lottery_live.caf",
+        "ELEHBER, lottery, lottery, won, chime.caf",
+        "ZAKAZ, lottery, lottery, won, chime.caf",
+        "ELEHBER, lottery, lottery, lost, chime.caf",
+        "ZAKAZ, lottery, lottery, lost, chime.caf"
     })
-    void iosAlertUsesBundledSoundForItsSection(String app, String channel, String scope, String sound) throws Exception {
+    void iosAlertUsesBundledSoundForItsSection(String app, String channel, String scope, String event, String sound) throws Exception {
         device.setAppCode(app);device.setPlatform("ios");
         var d=pending();d.setAppCode(app);
         Map<String,String> data=new HashMap<>(Map.of("title","Title","body","Body"));
         if(channel!=null) data.put("channel",channel);
         if(scope!=null) data.put("scope",scope);
+        if(event!=null) data.put("event",event);
         d.setPayload(new ObjectMapper().writeValueAsString(data));
         service.deliverDue();
         var captor=org.mockito.ArgumentCaptor.forClass(Message.class);

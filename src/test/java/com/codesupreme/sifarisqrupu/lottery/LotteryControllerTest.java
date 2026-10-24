@@ -44,4 +44,19 @@ class LotteryControllerTest {
         }
         verifyNoInteractions(service);
     }
+    @Test void announceToAllRequiresAdminAndDoesNotReplaceParticipantNotification() throws Exception {
+        mvc.perform(post("/api/v5/push/admin/lotteries/42/notify?audience=all").header("Authorization","member-token"))
+            .andExpect(status().isUnauthorized());
+        verifyNoInteractions(service);
+        when(admins.requireAdmin("admin-token")).thenReturn(com.codesupreme.sifarisqrupu.model.admin.Admin.builder().id(1L).build());
+        when(service.announce(42L)).thenReturn(new LotteryService.Notice(2,3,true));
+        mvc.perform(post("/api/v5/push/admin/lotteries/42/notify?audience=all").header("Authorization","admin-token").accept("application/json"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.queued").value(2));
+        verify(service).announce(42L);
+        mvc.perform(post("/api/v5/push/admin/lotteries/42/notify").header("Authorization","admin-token"))
+            .andExpect(status().isOk());
+        verify(service).notifyParticipants(42L);
+        mvc.perform(post("/api/v5/push/admin/lotteries/42/notify?audience=invalid").header("Authorization","admin-token"))
+            .andExpect(status().isBadRequest());
+    }
 }
