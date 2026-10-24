@@ -3,6 +3,7 @@ package com.codesupreme.sifarisqrupu.lottery;
 import com.codesupreme.sifarisqrupu.dao.user.UserRepository;
 import com.codesupreme.sifarisqrupu.model.user.User;
 import com.codesupreme.sifarisqrupu.push.FcmPushService;
+import com.codesupreme.sifarisqrupu.push.PushDeliveryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -23,12 +24,13 @@ public class LotteryService {
     private final UserRepository users;
     private final LotteryUserDirectory directory;
     private final FcmPushService fcm;
+    private final PushDeliveryRepository deliveries;
     private final SimpMessagingTemplate events;
     private final SecureRandom random=new SecureRandom();
     private static final ZoneId BAKU=ZoneId.of("Asia/Baku");
     public LotteryService(LotteryRepository lotteries,LotteryTicketRepository tickets,UserRepository users,
-                          LotteryUserDirectory directory,FcmPushService fcm,SimpMessagingTemplate events) {
-        this.lotteries=lotteries;this.tickets=tickets;this.users=users;this.directory=directory;this.fcm=fcm;this.events=events;
+                          LotteryUserDirectory directory,FcmPushService fcm,SimpMessagingTemplate events,PushDeliveryRepository deliveries) {
+        this.lotteries=lotteries;this.tickets=tickets;this.users=users;this.directory=directory;this.fcm=fcm;this.events=events;this.deliveries=deliveries;
     }
     public record Form(String title,String description,String imageUrl,Long drawAt,BigDecimal ticketPrice,Integer totalTickets) {}
     public record Issue(List<Long> userIds,String requestId) {}
@@ -167,15 +169,35 @@ public class LotteryService {
     }
     /** Admin-confirmed announcement, including customers without tickets or subscriptions. */
     @Transactional public Notice announce(Long id) {
-        var l=locked(id);require("ACTIVE".equals(l.getStatus()),"Yeni lotoreya elanı yalnız aktiv lotoreya üçün göndərilə bilər.");
-        var recipients=users.findAll().stream().filter(u->u.getId()!=null && !Boolean.TRUE.equals(u.getIsDisable()))
-            .map(User::getId).distinct().toList();
+        return announce(id,null);
+    }
+    private static String announcementEvent(Long id,String requestId) {
+        if(requestId==null || !requestId.matches("[a-zA-Z0-9-]{16,64}")) throw error(HttpStatus.BAD_REQUEST,"Yanlış bildiriş sorğusu.");
+        return "lottery-"+id+"-created-"+requestId;
+    }
+    @Transactional(readOnly=true) public Map<String,Object> announcementStatus(Long id,String requestId) {
+        visible(lotteries.findById(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı.")));
+        int queued=Math.toIntExact(deliveries.countByEventId(announcementEvent(id,requestId)));
+        return Map.of("completed",queued>0,"notification",new Notice(queued,0,fcm.isEnabled()));
+    }
+    @Transactional public Notice announce(Long id,String requestId) {
+        var l=locked(id);
+        String event=requestId==null ? null : announcementEvent(id,requestId);
+        if(event!=null) {
+            int existing=Math.toIntExact(deliveries.countByEventId(event));
+            if(existing>0) return new Notice(existing,0,fcm.isEnabled());
+        }
+        require("ACTIVE".equals(l.getStatus()),"Yeni lotoreya elanı yalnız aktiv lotoreya üçün göndərilə bilər.");
+        // Fetch IDs only; loading every complete account also fetched large
+        // profile/history fields before the first notification could be queued.
+        var recipients=users.findNotificationRecipientIds();
         l.setNotificationRound(l.getNotificationRound()+1);lotteries.save(l);
+        if(event==null) event="lottery-"+l.getId()+"-created-"+l.getNotificationRound();
         int queued=0;
         for(String app:List.of("ZAKAZ","ELEHBER")) queued+=fcm.enqueue(app,recipients,"🎟️ Yeni lotoreya!",
             l.getTitle()+" — Lotoreya ilə tanış olmaq üçün bildirişə toxunun.",
             Map.of("scope","lottery","channel","lottery","lotteryId",l.getId(),"event","created"),86400,
-            "lottery-"+l.getId()+"-created-"+l.getNotificationRound());
+            event);
         return new Notice(queued,recipients.size(),fcm.isEnabled());
     }
     private Notice notifyLocked(Lottery l) {

@@ -34,6 +34,7 @@ class LotteryIntegrationTest {
     @Autowired LotteryTicketRepository tickets;
     @MockBean UserRepository users;
     @MockBean FcmPushService fcm;
+    @MockBean com.codesupreme.sifarisqrupu.push.PushDeliveryRepository deliveries;
     @MockBean SimpMessagingTemplate events;
     @BeforeEach void setup() {
         tickets.deleteAll();lotteries.deleteAll();
@@ -44,10 +45,7 @@ class LotteryIntegrationTest {
     Long create(int total) {return service.create(form(total),1L).id();}
     LotteryService.Issue issue(long user) {return new LotteryService.Issue(List.of(user),UUID.randomUUID().toString());}
     @Test void announcementIncludesCustomersWithoutTicketsAndEachResendHasANewEvent() {
-        when(users.findAll()).thenReturn(List.of(
-            User.builder().id(7L).userType("customer").isDisable(false).online(false).isSub(false).build(),
-            User.builder().id(8L).userType("courier").isDisable(false).build(),
-            User.builder().id(9L).isDisable(true).build()));
+        when(users.findNotificationRecipientIds()).thenReturn(List.of(7L,8L));
         Long id=create(3);
         service.announce(id);service.announce(id);
         for(String app:List.of("ZAKAZ","ELEHBER")) {
@@ -57,6 +55,17 @@ class LotteryIntegrationTest {
         }
         service.cancel(id);
         assertThrows(ResponseStatusException.class,()->service.announce(id));
+    }
+    @Test void timedOutAnnouncementIsIdempotentAndItsCommitCanBeReadWithoutResending() {
+        Long id=create(3);String request="request-1234567890";
+        String event="lottery-"+id+"-created-"+request;
+        when(users.findNotificationRecipientIds()).thenReturn(List.of(7L,8L));
+        when(deliveries.countByEventId(event)).thenReturn(0L,4L,4L);
+        service.announce(id,request);
+        assertEquals(4,service.announce(id,request).queued());
+        assertEquals(true,service.announcementStatus(id,request).get("completed"));
+        for(String app:List.of("ZAKAZ","ELEHBER")) verify(fcm,times(1)).enqueue(eq(app),anyCollection(),anyString(),anyString(),anyMap(),eq(86400),eq(event));
+        verify(users,never()).findAll();
     }
     @Test void sequentialTicketsAndRetryDoNotDoubleIssue() {
         Long id=create(3);var request=issue(7);

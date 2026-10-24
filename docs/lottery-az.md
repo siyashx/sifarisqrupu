@@ -126,3 +126,8 @@ Canlı yoxlama: istifadəçi emulyatorda çıxış/giriş edib admin paneldən y
 Avtomatik bərpanın işləməsi üçün backend və Zakaz Qrupu yenilənməlidir. Native Android kodu da dəyişdiyi üçün tam tətbiq yenidən başladılmalıdır; hot reload kifayət etmir. Bu dəyişiklik üçün admin paneldə yeni kod yoxdur. Testlər: 68 backend, 5 Flutter testi keçdi; Flutter analizi təmizdir.
 
 Android `:app:compileDebugKotlin` yoxlaması da uğurludur (7 dəqiqə 24 saniyə); APK/AAB paketlənməyib.
+
+
+### Yeni elan bildirişinin gecikmiş cavabı
+
+Admin yeni elan göndərişində UUID `requestId` istifadə edir: `POST /api/v5/push/admin/lotteries/{id}/notify?audience=all&requestId=...`. Eyni lotoreya/sorğu identifikatoru üçün təkrar çağırış yeni bildiriş yaratmır. `GET /api/v5/push/admin/lotteries/{id}/notify?requestId=...` tranzaksiya ilə saxlanmış göndəriş nəticəsini yoxlayır; FCM-in və ya cihazın çatdırılma təsdiqi deyil. Vaxt həddi keçəndə admin panel yeni göndəriş etmədən nəticəni oxuyur. Native admin POST `/notify` və `/live` üçün 60 saniyə gözləyir; tam native rebuild lazımdır. İstifadəçilərdən yalnız ID-lər seçilir və FCM dublikatları cihaz başına sorğu əvəzinə tədbir üzrə bir sorğuda yoxlayır. `created` və `live` bildirişləri hər iki tətbiqdə `lottery_live` səsini istifadə edir; Android üçün tətbiqləri yenidən build etmək lazımdır.

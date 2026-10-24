@@ -16,11 +16,14 @@ public class AdminLotteryController {
     @PostMapping("/{id}/tickets") public Map<String,Object> issue(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@RequestBody LotteryService.Issue request){return Map.of("codes",service.issue(id,request,auth.requireAdmin(key).getId()));}
     @PostMapping("/{id}/live") public LotteryService.View open(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@RequestBody LotteryService.Open request){auth.requireAdmin(key);return service.open(id,request);}
     @PostMapping("/{id}/spin") public LotteryService.View spin(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id){auth.requireAdmin(key);return service.spin(id);}
-    @PostMapping("/{id}/notify") public LotteryService.Notice notify(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@RequestParam(defaultValue="participants") String audience){
+    @PostMapping("/{id}/notify") public LotteryService.Notice notify(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@RequestParam(defaultValue="participants") String audience,@RequestParam(required=false) String requestId){
         auth.requireAdmin(key);
-        if("all".equals(audience)) return service.announce(id);
+        if("all".equals(audience)) return requestId==null ? service.announce(id) : service.announce(id,requestId);
         if("participants".equals(audience)) return service.notifyParticipants(id);
         throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,"Yanlış bildiriş seçimi.");
+    }
+    @GetMapping("/{id}/notify") public Map<String,Object> notificationStatus(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@RequestParam String requestId){
+        auth.requireAdmin(key);return service.announcementStatus(id,requestId);
     }
     @PostMapping("/{id}/tickets/{code}/revoke") public LotteryService.View revoke(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id,@PathVariable String code){return service.revokeTicket(id,code,auth.requireAdmin(key).getId());}
     @PostMapping("/{id}/delete") public Map<String,Boolean> delete(@RequestHeader(value="Authorization",required=false) String key,@PathVariable Long id){service.delete(id,auth.requireAdmin(key).getId());return Map.of("deleted",true);}

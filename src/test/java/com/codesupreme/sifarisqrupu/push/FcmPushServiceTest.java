@@ -48,7 +48,7 @@ class FcmPushServiceTest {
         assertTrue(item.getExpiresAt()>System.currentTimeMillis());
     }
     @Test void duplicateEventDoesNotQueueTwice() {
-        when(deliveries.existsByEventIdAndDeviceId("same-event",10L)).thenReturn(true);
+        when(deliveries.findDeviceIdsByEventId("same-event")).thenReturn(List.of(10L));
         assertEquals(0,service.enqueue("ELEHBER",List.of(7L),"T","B",Map.of(),60,"same-event"));
         verify(deliveries,never()).save(any());
     }
@@ -93,6 +93,8 @@ class FcmPushServiceTest {
         "ELEHBER, unknown, , , notifysound.caf",
         "ELEHBER, lottery, lottery, live, lottery_live.caf",
         "ZAKAZ, lottery, lottery, live, lottery_live.caf",
+        "ELEHBER, lottery, lottery, created, lottery_live.caf",
+        "ZAKAZ, lottery, lottery, created, lottery_live.caf",
         "ELEHBER, , lottery, live, lottery_live.caf",
         "ZAKAZ, , lottery, live, lottery_live.caf",
         "ELEHBER, lottery, lottery, won, chime.caf",

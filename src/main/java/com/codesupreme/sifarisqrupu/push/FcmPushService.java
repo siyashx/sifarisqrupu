@@ -81,9 +81,12 @@ public class FcmPushService {
         try { payload=json.writeValueAsString(values); } catch(Exception e) {throw new IllegalArgumentException("Invalid push payload");}
         if(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>3500) throw new IllegalArgumentException("Push payload too large");
         int queued=0;
+        // One duplicate lookup for the whole event; per-device exists queries
+        // flushed every preceding insert and made broadcasts exceed HTTP timeouts.
+        Set<Long> alreadyQueued=new HashSet<>(deliveries.findDeviceIdsByEventId(id));
         for(PushDevice device:devices.findByAppCodeAndUserIdInAndEnabledTrue(appCode,userIds)) {
             if(!PushDeliveryPolicy.allowsDevice(values,device)) continue;
-            if(deliveries.existsByEventIdAndDeviceId(id,device.getId())) continue;
+            if(!alreadyQueued.add(device.getId())) continue;
             PushDelivery item=new PushDelivery();
             item.setEventId(id); item.setDeviceId(device.getId()); item.setUserId(device.getUserId()); item.setAppCode(appCode);
             Map<String,String> targeted=new LinkedHashMap<>(values);
@@ -164,7 +167,7 @@ public class FcmPushService {
 
     private static String iosSound(String appCode, Map<String,String> data) {
         // Mirror each Android app's channel mapping using bundled Apple sounds.
-        if (Set.of("ELEHBER","ZAKAZ").contains(appCode) && "live".equals(data.get("event")) &&
+        if (Set.of("ELEHBER","ZAKAZ").contains(appCode) && Set.of("live","created").contains(data.getOrDefault("event","")) &&
             ("lottery".equals(data.get("channel")) || "lottery".equals(data.get("scope")))) return "lottery_live.caf";
         if ("ELEHBER".equals(appCode)) {
             return Set.of("shop","lottery").contains(data.getOrDefault("channel","")) ? "chime.caf" : "notifysound.caf";

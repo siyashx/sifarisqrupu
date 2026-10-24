@@ -59,4 +59,15 @@ class LotteryControllerTest {
         mvc.perform(post("/api/v5/push/admin/lotteries/42/notify?audience=invalid").header("Authorization","admin-token"))
             .andExpect(status().isBadRequest());
     }
+    @Test void announcementStatusIsAdminOnlyAndReadsInsteadOfSending() throws Exception {
+        mvc.perform(get("/api/v5/push/admin/lotteries/42/notify?requestId=request-1234567890"))
+            .andExpect(status().isUnauthorized());
+        when(admins.requireAdmin("admin-token")).thenReturn(com.codesupreme.sifarisqrupu.model.admin.Admin.builder().id(1L).build());
+        when(service.announcementStatus(42L,"request-1234567890")).thenReturn(Map.of("completed",true,"notification",new LotteryService.Notice(4,0,true)));
+        mvc.perform(get("/api/v5/push/admin/lotteries/42/notify?requestId=request-1234567890").header("Authorization","admin-token").accept("application/json"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.completed").value(true)).andExpect(jsonPath("$.notification.queued").value(4));
+        verify(service).announcementStatus(42L,"request-1234567890");
+        verify(service,never()).announce(anyLong(),anyString());
+    }
+
 }

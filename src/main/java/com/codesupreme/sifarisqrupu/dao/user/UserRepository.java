@@ -7,6 +7,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface UserRepository extends JpaRepository<User, Long> {
+    @Query("select u.id from User u where u.isDisable is null or u.isDisable = false")
+    List<Long> findNotificationRecipientIds();
     User findUserByPhoneNumber(String phoneNumber);
     User findByLocationUrl(String locationUrl);
 
