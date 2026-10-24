@@ -143,10 +143,16 @@ class FcmPushServiceTest {
         "ZAKAZ, lottery, lottery, created, lottery_live.caf",
         "ELEHBER, , lottery, live, lottery_live.caf",
         "ZAKAZ, , lottery, live, lottery_live.caf",
-        "ELEHBER, lottery, lottery, won, chime.caf",
-        "ZAKAZ, lottery, lottery, won, chime.caf",
-        "ELEHBER, lottery, lottery, lost, chime.caf",
-        "ZAKAZ, lottery, lottery, lost, chime.caf"
+        "ELEHBER, lottery, lottery, won, lottery_winner.caf",
+        "ZAKAZ, lottery, lottery, won, lottery_winner.caf",
+        "ELEHBER, , lottery, won, lottery_winner.caf",
+        "ZAKAZ, , lottery, won, lottery_winner.caf",
+        "ELEHBER, lottery, lottery, lost, lottery_result.caf",
+        "ZAKAZ, lottery, lottery, lost, lottery_result.caf",
+        "ELEHBER, , lottery, lost, lottery_result.caf",
+        "ZAKAZ, , lottery, lost, lottery_result.caf",
+        "ELEHBER, moto_chat, mototaxi, won, notifysound.caf",
+        "ZAKAZ, shop, , lost, chime.caf"
     })
     void iosAlertUsesBundledSoundForItsSection(String app, String channel, String scope, String event, String sound) throws Exception {
         device.setAppCode(app);device.setPlatform("ios");

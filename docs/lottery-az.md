@@ -131,3 +131,19 @@ Android `:app:compileDebugKotlin` yoxlaması da uğurludur (7 dəqiqə 24 saniy�
 ### Yeni elan bildirişinin gecikmiş cavabı
 
 Admin yeni elan göndərişində UUID `requestId` istifadə edir: `POST /api/v5/push/admin/lotteries/{id}/notify?audience=all&requestId=...`. Eyni lotoreya/sorğu identifikatoru üçün təkrar çağırış yeni bildiriş yaratmır. `GET /api/v5/push/admin/lotteries/{id}/notify?requestId=...` tranzaksiya ilə saxlanmış göndəriş nəticəsini yoxlayır; FCM-in və ya cihazın çatdırılma təsdiqi deyil. Vaxt həddi keçəndə admin panel yeni göndəriş etmədən nəticəni oxuyur. Native admin POST `/notify` və `/live` üçün 60 saniyə gözləyir; tam native rebuild lazımdır. İstifadəçilərdən yalnız ID-lər seçilir və FCM dublikatları cihaz başına sorğu əvəzinə tədbir üzrə bir sorğuda yoxlayır. `created` və `live` bildirişləri hər iki tətbiqdə `lottery_live` səsini istifadə edir; Android üçün tətbiqləri yenidən build etmək lazımdır.
+
+### Lotoreya üçün fərqli nəticə bildiriş səsləri — 24.10.2026
+
+Hər iki mobil tətbiqdə Android/iOS üçün eyni üç ayrı lotoreya tonu istifadə olunur:
+
+- `created` / `live`: mövcud `lottery_live` elan/canlı səsi.
+- `won`: yeni 3 saniyəlik `lottery_winner` təbrik melodiyası.
+- `lost`: yeni 2.35 saniyəlik `lottery_result` yumşaq enən bildiriş tonu.
+
+Android qalib/nəticə üçün ayrıca `fcm_lottery_winner_v1` və `fcm_lottery_result_v1` kanalları yaradır; əvvəlki ümumi kanalın səsinə ilişib qalmır. İstifadəçinin sistem bildiriş ayarları qorunur. iOS backend bu mesajların `aps.sound` dəyərini uyğun CAF faylına yönəldir. Səs yalnız `lottery` scope/channel-ına aiddir. Adi sifariş, çat və mağaza səsləri dəyişmir. Səhnədəki qalib pəncərəsinin fişəng səsi ayrıca qalır.
+
+Native Android resursları və Xcode Runner Copy Bundle Resources yenilənib; hot reload kifayət deyil. Əvvəl hər iki tətbiqi yeni native resurslarla tam build edin, sonra backend səs xəritəsini deploy edin. Backend əvvəl deploy olunarsa köhnə iOS tətbiqində yeni CAF olmadığı üçün həmin push xüsusi səs əvəzinə sistem səsi ilə gələ bilər. Yeni versiya/build nömrəsi bu tapşırıqda dəyişdirilməyib. Admin panelində dəyişiklik tələb olunmur.
+
+Səslər sıfırdan sintez edilib, üçüncü tərəf yazısı/sample yoxdur. Faylların mono 44.1 kHz / 16-bit PCM formatı və Android WAV / iOS CAF PCM eyniliyi yoxlanıb.
+
+Səs dəyişikliklərinin yoxlaması: 57 FcmPushService testi və hər iki Android native Kotlin kompilyasiyası uğurludur. iOS resurs bağlantıları və CAF format/PCM yoxlaması keçir; yeni bildiriş səslərinin iOS cihazında eşidilməsi ayrıca native rebuild və göndəriş sınağı tələb edir.
