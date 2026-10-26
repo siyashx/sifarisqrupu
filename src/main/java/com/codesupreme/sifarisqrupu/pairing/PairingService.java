@@ -168,12 +168,12 @@ public class PairingService {
   }
 
   public static String avatar(User u) {
-    // The existing account has no public profile photo field. Do not expose
-    // identifyPhoto (identity documents) as an avatar.
-    return u.getProfileImageUrl() != null &&
-      u.getProfileImageUrl().startsWith("https://")
-      ? u.getProfileImageUrl()
-      : null;
+    // The first verification photo is the profile portrait; later entries are documents.
+    var photos = u.getIdentifyPhoto();
+    String portrait = photos == null || photos.isEmpty() ? null : photos.get(0);
+    if (portrait != null && portrait.startsWith("https://")) return portrait;
+    return u.getProfileImageUrl() != null && u.getProfileImageUrl().startsWith("https://")
+      ? u.getProfileImageUrl() : null;
   }
 
   @Transactional(readOnly = true)

@@ -341,12 +341,13 @@ class PairingServiceTest {
   }
 
   @Test
-  void validatesInitialDivisionAndNeverUsesIdentityPhotosAsPublicAvatar() {
+  void validatesInitialDivisionAndUsesOnlyFirstProfilePortrait() {
     assertThrows(ResponseStatusException.class, () -> create(5, 2));
     var u = User.builder()
-      .identifyPhoto(List.of("https://example.com/id-card.jpg"))
+      .identifyPhoto(List.of("https://example.com/portrait.jpg", "https://example.com/id-card.jpg"))
       .build();
-    assertNull(PairingService.avatar(u));
+    assertEquals("https://example.com/portrait.jpg", PairingService.avatar(u));
+    assertNull(PairingService.avatar(User.builder().identifyPhoto(List.of()).build()));
   }
 
   @Test

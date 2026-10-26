@@ -25,7 +25,7 @@ Yaratdıqdan və detaldan təkrar bildiriş göndərərkən Hamıya / İştirak�
 
 Lotoreya və cütləşmə canlı səhifələrində göz ikonu izləyənlərin sayını və siyahısını açır. Eyni hesabın bir neçə tətbiq sessiyası bir izləyici sayılır. Heartbeat 10 saniyədir; çıxış və arxa plana keçid siyahıdan çıxarır, əlaqəsi qırılan sessiya 30 saniyədən sonra silinir. Presence cari tək backend instansiyasının yaddaşındadır; backend restartında yenidən toplanır. Bir neçə backend instansiyasına keçilərsə ortaq presence saxlancları tələb olunur.
 
-İzləyici və cütləşmə adlarının solunda profil şəkli, şəkil yoxdursa adın baş hərfi göstərilir. Köhnə `identifyPhoto` şəxsiyyət təsdiqi üçündür və ictimai avatar kimi paylaşılmır. Ayrı, istəyə bağlı `user.profile_image_url` HTTPS ünvanı oxunur; bu dəyişiklik profil şəkli yükləmə forması əlavə etmir.
+İzləyici və cütləşmə adlarının solunda profil şəkli, şəkil yoxdursa adın baş hərfi göstərilir. `identifyPhoto[0]` profil portreti kimi oxunur; sonrakı indekslər ictimai avatar kimi istifadə olunmur. İlk şəkil yoxdursa istəyə bağlı `user.profile_image_url` HTTPS ünvanına keçilir. Şəkil yüklənməzsə adın baş hərfi göstərilir.
 
 ## API və məlumat bazası
 
