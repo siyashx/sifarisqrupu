@@ -25,6 +25,7 @@ public class User {
     private String oneSignal;
     private String userType;
     private String name;
+    @Column(length=2000) private String profileImageUrl;
     private String phoneNumber;
     private List<Long> notificationHistory;
     private Boolean isMutedNotifications;

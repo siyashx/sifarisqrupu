@@ -216,6 +216,7 @@ public class FcmPushService {
 
     private static String iosSound(String appCode, Map<String,String> data) {
         // Mirror each Android app's channel mapping using bundled Apple sounds.
+        if(Set.of("ELEHBER","ZAKAZ").contains(appCode) && ("pairing".equals(data.get("scope"))||"pairing".equals(data.get("channel")))) return "pairing_notify.caf";
         if (Set.of("ELEHBER","ZAKAZ").contains(appCode) && "won".equals(data.get("event")) &&
             ("lottery".equals(data.get("channel")) || "lottery".equals(data.get("scope")))) return "lottery_winner.caf";
         if (Set.of("ELEHBER","ZAKAZ").contains(appCode) && "lost".equals(data.get("event")) &&

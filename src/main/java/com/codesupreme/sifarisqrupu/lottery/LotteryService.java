@@ -50,7 +50,6 @@ public class LotteryService {
     private static ResponseStatusException error(HttpStatus status,String message) {return new ResponseStatusException(status,message);}
     private static void require(boolean condition,String message) {if(!condition) throw error(HttpStatus.CONFLICT,message);}
     private static String clean(String value) {return value==null ? "" : value.strip();}
-    private static boolean early(Lottery l) {return LocalDate.now(BAKU).isBefore(Instant.ofEpochMilli(l.getDrawAt()).atZone(BAKU).toLocalDate());}
     private static Person person(User u) {return new Person(u.getId(),Objects.toString(u.getName(),"İstifadəçi"),Objects.toString(u.getPhoneNumber(),""));}
     private static String code(int value) {return String.format(Locale.ROOT,"%05d",value);}
     private void pushQueued(Long lotteryId,String event,int targets,int participants) {
@@ -73,14 +72,14 @@ public class LotteryService {
     }
     private void apply(Lottery l,Form f) {
         if(f==null || clean(f.title()).isEmpty() || clean(f.title()).length()>140 || clean(f.description()).length()>4000 ||
-            clean(f.imageUrl()).length()>2000 || f.drawAt()==null || f.drawAt()<=0 || f.ticketPrice()==null ||
+            clean(f.imageUrl()).length()>2000 || f.ticketPrice()==null ||
             f.ticketPrice().signum()<0 || f.ticketPrice().scale()>2 || f.ticketPrice().compareTo(new BigDecimal("99999999"))>0 ||
             f.totalTickets()==null || f.totalTickets()<1 || f.totalTickets()>99999) throw error(HttpStatus.BAD_REQUEST,"Məlumatları düzgün doldurun. Bilet sayı 1–99999 olmalıdır.");
         try {var uri=URI.create(f.imageUrl());if(!"https".equals(uri.getScheme()) || uri.getHost()==null) throw new IllegalArgumentException();}
         catch(RuntimeException e) {throw error(HttpStatus.BAD_REQUEST,"Şəkil üçün HTTPS keçidi tələb olunur.");}
         require(f.totalTickets()>=l.getSoldTickets(),"Toplam bilet sayı verilmiş biletlərdən az ola bilməz.");
         l.setTitle(clean(f.title()));l.setDescription(clean(f.description()));l.setImageUrl(clean(f.imageUrl()));
-        l.setDrawAt(f.drawAt());l.setTicketPrice(f.ticketPrice());l.setTotalTickets(f.totalTickets());
+        l.setDrawAt(0);l.setTicketPrice(f.ticketPrice());l.setTotalTickets(f.totalTickets());
     }
     private View view(Lottery l,Long userId,boolean admin) { return view(l,userId,admin,null); }
     private View view(Lottery l,Long userId,boolean admin,Notice notification) {return view(l,userId,admin,notification,true);}
@@ -90,12 +89,12 @@ public class LotteryService {
             winner=tickets.findByLotteryIdAndNumber(l.getId(),l.getWinnerNumber()).flatMap(t->users.findById(t.getUserId())).orElse(null);
         }
         var own=userId==null ? List.<String>of() : tickets.findByLotteryIdAndUserIdAndRevokedFalseOrderByNumber(l.getId(),userId).stream().map(LotteryTicket::code).toList();
-        return new View(l.getId(),l.getVersion(),l.getTitle(),l.getDescription(),l.getImageUrl(),l.getDrawAt(),l.getTicketPrice(),l.getTotalTickets(),l.getSoldTickets(),
+        return new View(l.getId(),l.getVersion(),l.getTitle(),l.getDescription(),l.getImageUrl(),0,l.getTicketPrice(),l.getTotalTickets(),l.getSoldTickets(),
             l.getTotalTickets()==0 ? 0 : l.getSoldTickets()*100.0/l.getTotalTickets(),l.getStatus(),l.getDurationSeconds(),l.getStartedAt(),l.getEndsAt(),l.getFinalRotation(),
             "COMPLETED".equals(l.getStatus()) ? code(l.getWinnerNumber()) : null,winner==null ? null : winner.getName(),admin && winner!=null ? person(winner):null,own,System.currentTimeMillis(),l.getCreatedAt(),notification,includeWheel && Set.of("LIVE","DRAWING","COMPLETED").contains(l.getStatus()) ? tickets.findByLotteryIdAndRevokedFalseOrderByNumber(l.getId()).stream().map(LotteryTicket::code).toList() : List.of());
     }
     @Transactional(readOnly=true) public List<View> list(Long user,boolean admin) {
-        return lotteries.findByDeletedFalseOrderByCreatedAtDesc().stream().filter(l->admin || !"CANCELLED".equals(l.getStatus())).map(l->view(l,user,admin,null,false)).toList();
+        return lotteries.findByDeletedFalseOrderByCreatedAtDesc().stream().filter(l->admin || !"CANCELLED".equals(l.getStatus())).sorted(Comparator.comparingInt((Lottery l)->Set.of("COMPLETED","CANCELLED").contains(l.getStatus())?1:0).thenComparing(Comparator.comparingLong(Lottery::getCreatedAt).reversed()).thenComparing(Comparator.comparingLong(Lottery::getId).reversed())).map(l->view(l,user,admin,null,false)).toList();
     }
     @Transactional(readOnly=true) public View detail(Long id,Long user,boolean admin) {
         var l=visible(lotteries.findById(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı.")));return view(l,user,admin);
@@ -157,7 +156,6 @@ public class LotteryService {
         var l=locked(id);require(Set.of("ACTIVE","LIVE").contains(l.getStatus()),"Bu lotoreyanın çarxı artıq başladılıb və ya bağlanıb.");
         require(l.getSoldTickets()>0,"Əvvəlcə ən azı bir bilet verin.");
         if(request.durationSeconds()<5 || request.durationSeconds()>3600) throw error(HttpStatus.BAD_REQUEST,"Müddət 5–3600 saniyə olmalıdır.");
-        require(!early(l) || request.confirmEarly(),"Çarxı lotoreya tarixindən əvvəl çevirməkdən əminsiniz?");
         l.setStatus("LIVE");l.setDurationSeconds(request.durationSeconds());change(l);
         Notice notification=request.notifyParticipants() ? notifyLocked(l) : null;
         return view(l,null,true,notification);

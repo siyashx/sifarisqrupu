@@ -85,16 +85,15 @@ class LotteryIntegrationTest {
             assertEquals(1,successes);assertEquals(1,tickets.count());assertEquals(1,service.detail(id,null,true).soldTickets());
         } finally {pool.shutdownNow();}
     }
-    @Test void liveFreezesSalesAndDateConfirmationIsServerEnforced() {
+    @Test void liveFreezesSalesWithoutDateRequirement() {
         Long id=create(3);service.issue(id,issue(7),1L);
-        assertThrows(ResponseStatusException.class,()->service.open(id,new LotteryService.Open(false,false,30)));
-        var live=service.open(id,new LotteryService.Open(false,true,30));assertEquals("LIVE",live.status());
+        var live=service.open(id,new LotteryService.Open(false,false,30));assertEquals("LIVE",live.status());
         assertThrows(ResponseStatusException.class,()->service.issue(id,issue(8),1L));
         assertThrows(ResponseStatusException.class,()->service.edit(id,form(4)));
         assertEquals("CANCELLED",service.cancel(id).status());
         assertThrows(ResponseStatusException.class,()->service.spin(id));
     }
-    @Test void sameBakuCalendarDateDoesNotRequireEarlyConfirmation() {
+    @Test void legacyDateDoesNotRequireEarlyConfirmation() {
         Long id=create(2);var l=lotteries.findById(id).orElseThrow();l.setDrawAt(System.currentTimeMillis());lotteries.saveAndFlush(l);
         service.issue(id,issue(7),1L);
         assertEquals("LIVE",service.open(id,new LotteryService.Open(false,false,5)).status());

@@ -57,6 +57,8 @@ class WorkNotificationPreferencesTest {
     }
     @Test void lotteryShopPersonalStatusesAndControlsBypassWorkPreferences() {
         user.setOnline(false);zakaz.setMuted(true);elehber.setMuted(true);
+        assertTrue(policy.allows(Map.of("scope","pairing","channel","pairing","event","live"),7L,"ELEHBER"));
+        assertTrue(policy.allows(Map.of("scope","pairing","channel","pairing","event","created"),7L,"ZAKAZ"));
         for(String app:List.of("ZAKAZ","ELEHBER")) {
             for(String event:List.of("created","live","won","lost")) {
                 assertTrue(policy.allows(Map.of("scope","lottery","channel","lottery","event",event),7L,app));

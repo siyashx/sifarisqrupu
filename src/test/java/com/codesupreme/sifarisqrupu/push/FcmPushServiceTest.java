@@ -137,6 +137,8 @@ class FcmPushServiceTest {
         "ELEHBER, , mototaxi_chat, , notifysound.caf",
         "ELEHBER, , , , notifysound.caf",
         "ELEHBER, unknown, , , notifysound.caf",
+        "ELEHBER, pairing, pairing, live, pairing_notify.caf",
+        "ZAKAZ, pairing, pairing, created, pairing_notify.caf",
         "ELEHBER, lottery, lottery, live, lottery_live.caf",
         "ZAKAZ, lottery, lottery, live, lottery_live.caf",
         "ELEHBER, lottery, lottery, created, lottery_live.caf",
