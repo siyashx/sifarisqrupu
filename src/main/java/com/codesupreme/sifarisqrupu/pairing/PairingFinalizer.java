@@ -20,6 +20,7 @@ public class PairingFinalizer {
   @Scheduled(fixedDelay = 1000)
   public void finish() {
     for (var p : repository.findByStatusAndDeletedFalse("DRAWING")) {
+      if (p.isTestMode()) continue;
       try {
         service.finishAnimation(p.getId());
       } catch (RuntimeException e) {

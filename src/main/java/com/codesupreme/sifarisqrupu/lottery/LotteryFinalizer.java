@@ -10,6 +10,7 @@ public class LotteryFinalizer {
     @Scheduled(fixedDelay=1000)
     public void finishDue() {
         for(var l:repository.findByStatusAndEndsAtLessThanEqual("DRAWING",System.currentTimeMillis())) {
+            if(l.isTestMode()) continue;
             try {service.finish(l.getId());}
             catch(RuntimeException error){
                 // Transaction rolls back both completion and result pushes;

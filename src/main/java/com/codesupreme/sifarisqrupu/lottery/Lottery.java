@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import java.math.BigDecimal;
 @Entity @Getter @Setter
-@Table(name="lottery",indexes=@Index(columnList="status,ends_at"),uniqueConstraints=@UniqueConstraint(columnNames={"created_by","test_request_id"}))
+@Table(name="lottery",indexes=@Index(columnList="status,ends_at"))
 public class Lottery {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
     @Version private long version;
@@ -26,9 +26,8 @@ public class Lottery {
     private long updatedAt;
     private int notificationRound;
     @Column(nullable=false,columnDefinition="boolean default false") private boolean deleted;
+    // Retired simulation rows stay excluded from all live features.
     @Column(nullable=false,columnDefinition="boolean default false") private boolean testMode;
-    private Long testUserId;
-    @Column(name="test_request_id",length=64) private String testRequestId;
     private Long deletedBy;
     private Long deletedAt;
 }

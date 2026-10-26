@@ -494,4 +494,19 @@ class PairingServiceTest {
     verify(fcm,times(1)).enqueue(eq("ADMIN"),eq(List.of(1L)),anyString(),anyString(),anyMap(),anyInt(),anyString());
   }
 
+  @Test
+  void retiredSimulationRowsAreHiddenAndCannotBeStartedOrBroadcast() {
+    long real = create(4, 2), retired = create(4, 2);
+    db.get(retired).setTestMode(true);
+    when(repo.findByDeletedFalseOrderByCreatedAtDesc()).thenReturn(List.of(db.get(retired), db.get(real)));
+    for (Long viewer : Arrays.asList(null, 1L, 999L)) {
+      assertEquals(List.of(real), service.list(viewer).stream().map(p -> ((Number)p.get("id")).longValue()).toList());
+      var error = assertThrows(ResponseStatusException.class, () -> service.detail(retired, viewer));
+      assertEquals(404, error.getStatusCode().value());
+    }
+    assertThrows(ResponseStatusException.class, () -> service.start(retired, new PairingService.Start(null,null,60)));
+    assertThrows(ResponseStatusException.class, () -> service.notify(retired,"all"));
+    verifyNoInteractions(fcm);
+  }
+
 }

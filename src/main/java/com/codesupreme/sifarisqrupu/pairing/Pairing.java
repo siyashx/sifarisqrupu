@@ -45,8 +45,8 @@ public class Pairing {
   @Column(name = "request_id", length = 64)
   private String requestId;
 
+  // Retired simulation rows stay excluded from all live features.
   @Column(nullable=false,columnDefinition="boolean default false") private boolean testMode;
-  private Long testUserId;
   private boolean deleted;
   private int notificationRound;
 }

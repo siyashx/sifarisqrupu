@@ -228,4 +228,18 @@ class LotteryIntegrationTest {
             assertEquals(0,one.get(15,TimeUnit.SECONDS));assertEquals(0,two.get(15,TimeUnit.SECONDS));assertEquals(0,service.detail(id,null,true).soldTickets());
         } finally {pool.shutdownNow();}
     }
+    @Test void retiredSimulationRowsAreHiddenAndCannotBeStartedOrBroadcast() {
+        Long real=create(3), retired=create(3);
+        var row=lotteries.findById(retired).orElseThrow();row.setTestMode(true);lotteries.saveAndFlush(row);
+        for(boolean admin:List.of(true,false)) {
+            assertEquals(List.of(real),service.list(7L,admin).stream().map(LotteryService.View::id).toList());
+            var error=assertThrows(ResponseStatusException.class,()->service.detail(retired,7L,admin));
+            assertEquals(404,error.getStatusCode().value());
+        }
+        assertThrows(ResponseStatusException.class,()->service.open(retired,new LotteryService.Open(false,false,30)));
+        assertThrows(ResponseStatusException.class,()->service.announce(retired));
+        assertThrows(ResponseStatusException.class,()->service.issue(retired,issue(7),1L));
+        verifyNoInteractions(fcm);
+    }
+
 }

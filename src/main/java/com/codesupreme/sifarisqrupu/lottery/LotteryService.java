@@ -45,7 +45,7 @@ public class LotteryService {
     public record Notice(int queued,int participants,boolean fcmEnabled) {}
     public record PageView<T>(List<T> items,long total,int page,int pages) {}
 
-    private Lottery visible(Lottery l) {if(l.isDeleted()) throw error(HttpStatus.NOT_FOUND,"Lotoreya silinib və ya mövcud deyil.");return l;}
+    private Lottery visible(Lottery l) {if(l.isDeleted() || l.isTestMode()) throw error(HttpStatus.NOT_FOUND,"Lotoreya silinib və ya mövcud deyil.");return l;}
     private Lottery locked(Long id) {return visible(lotteries.lock(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı.")));}
     private static ResponseStatusException error(HttpStatus status,String message) {return new ResponseStatusException(status,message);}
     private static void require(boolean condition,String message) {if(!condition) throw error(HttpStatus.CONFLICT,message);}
@@ -86,7 +86,7 @@ public class LotteryService {
     private View view(Lottery l,Long userId,boolean admin,Notice notification,boolean includeWheel) {
         User winner=null;
         if("COMPLETED".equals(l.getStatus()) && l.getWinnerNumber()!=null) {
-            winner=tickets.findByLotteryIdAndNumber(l.getId(),l.getWinnerNumber()).flatMap(t->t.getUserId()<0 && l.isTestMode()?Optional.of(User.builder().id(t.getUserId()).name("Sınaq iştirakçısı "+(-t.getUserId())).build()):users.findById(t.getUserId())).orElse(null);
+            winner=tickets.findByLotteryIdAndNumber(l.getId(),l.getWinnerNumber()).flatMap(t->users.findById(t.getUserId())).orElse(null);
         }
         var own=userId==null ? List.<String>of() : tickets.findByLotteryIdAndUserIdAndRevokedFalseOrderByNumber(l.getId(),userId).stream().map(LotteryTicket::code).toList();
         return new View(l.getId(),l.getVersion(),l.getTitle(),l.getDescription(),l.getImageUrl(),0,l.getTicketPrice(),l.getTotalTickets(),l.getSoldTickets(),
@@ -94,10 +94,10 @@ public class LotteryService {
             "COMPLETED".equals(l.getStatus()) ? code(l.getWinnerNumber()) : null,winner==null ? null : winner.getName(),admin && winner!=null ? person(winner):null,own,System.currentTimeMillis(),l.getCreatedAt(),notification,includeWheel && Set.of("LIVE","DRAWING","COMPLETED").contains(l.getStatus()) ? tickets.findByLotteryIdAndRevokedFalseOrderByNumber(l.getId()).stream().map(LotteryTicket::code).toList() : List.of());
     }
     @Transactional(readOnly=true) public List<View> list(Long user,boolean admin) {
-        return lotteries.findByDeletedFalseOrderByCreatedAtDesc().stream().filter(l->!l.isTestMode() || admin || Objects.equals(user,l.getTestUserId())).filter(l->admin || !"CANCELLED".equals(l.getStatus())).sorted(Comparator.comparingInt((Lottery l)->Set.of("COMPLETED","CANCELLED").contains(l.getStatus())?1:0).thenComparing(Comparator.comparingLong(Lottery::getCreatedAt).reversed()).thenComparing(Comparator.comparingLong(Lottery::getId).reversed())).map(l->view(l,user,admin,null,false)).toList();
+        return lotteries.findByDeletedFalseOrderByCreatedAtDesc().stream().filter(l->!l.isTestMode()).filter(l->admin || !"CANCELLED".equals(l.getStatus())).sorted(Comparator.comparingInt((Lottery l)->Set.of("COMPLETED","CANCELLED").contains(l.getStatus())?1:0).thenComparing(Comparator.comparingLong(Lottery::getCreatedAt).reversed()).thenComparing(Comparator.comparingLong(Lottery::getId).reversed())).map(l->view(l,user,admin,null,false)).toList();
     }
     @Transactional(readOnly=true) public View detail(Long id,Long user,boolean admin) {
-        var l=visible(lotteries.findById(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı.")));require(!l.isTestMode() || admin || Objects.equals(user,l.getTestUserId()),"Sınaq yalnız seçilmiş hesab üçündür.");return view(l,user,admin);
+        var l=visible(lotteries.findById(id).orElseThrow(()->error(HttpStatus.NOT_FOUND,"Lotoreya tapılmadı.")));return view(l,user,admin);
     }
     @Transactional public View create(Form form,Long admin) {
         var l=new Lottery();apply(l,form);l.setCreatedBy(admin);l.setCreatedAt(System.currentTimeMillis());change(l);return view(l,null,true);
@@ -115,7 +115,6 @@ public class LotteryService {
         if(request==null || request.userIds()==null || request.userIds().isEmpty() || request.userIds().size()>100 ||
             request.requestId()==null || !request.requestId().matches("[a-zA-Z0-9-]{16,64}")) throw error(HttpStatus.BAD_REQUEST,"İstifadəçi seçin.");
         var ids=new LinkedHashSet<>(request.userIds());
-        require(!l.isTestMode() || ids.equals(Set.of(l.getTestUserId())),"Sınaq bileti yalnız sınaq hesabına verilə bilər.");
         if(ids.contains(null)) throw error(HttpStatus.BAD_REQUEST,"Yanlış istifadəçi.");
         var old=tickets.findByLotteryIdAndRequestIdOrderByNumber(id,request.requestId());
         if(!old.isEmpty()) {
@@ -200,7 +199,7 @@ public class LotteryService {
         require("ACTIVE".equals(l.getStatus()),"Yeni lotoreya elanı yalnız aktiv lotoreya üçün göndərilə bilər.");
         // Fetch IDs only; loading every complete account also fetched large
         // profile/history fields before the first notification could be queued.
-        var recipients=l.isTestMode()?List.of(l.getTestUserId()):users.findNotificationRecipientIds();
+        var recipients=users.findNotificationRecipientIds();
         l.setNotificationRound(l.getNotificationRound()+1);lotteries.save(l);
         if(event==null) event="lottery-"+l.getId()+"-created-"+l.getNotificationRound();
         int queued=0;
@@ -217,7 +216,6 @@ public class LotteryService {
         int page=0;Page<LotteryTicket> rows;
         do {rows=tickets.findByLotteryIdAndRevokedFalseOrderByNumber(l.getId(),PageRequest.of(page++,500));rows.forEach(t->participants.add(t.getUserId()));} while(rows.hasNext());
         int queued=0;
-        if(l.isTestMode()) participants.retainAll(Set.of(l.getTestUserId()));
         for(String app:List.of("ZAKAZ","ELEHBER")) queued+=fcm.enqueue(app,participants,"🔴 Lotoreya hazırda keçirilir",l.getTitle()+" — Lotoreyanı canlı izləmək üçün bildiriş üzərinə klik edin.",
             Map.of("scope","lottery","channel","lottery","lotteryId",l.getId(),"event","live"),300,"lottery-"+l.getId()+"-live-"+l.getNotificationRound());
         pushQueued(l.getId(),"live",queued,participants.size());
@@ -239,7 +237,6 @@ public class LotteryService {
         int queued=0,winnerTargets=0;
         for(var participant:participants.entrySet()) {
             Long userId=participant.getKey();
-            if(l.isTestMode() && !Objects.equals(userId,l.getTestUserId())) continue;
             boolean won=Objects.equals(userId,winner.getUserId());
             var codes=won ? List.of(winner.code()) : participant.getValue();
             for(int offset=0;offset<codes.size();offset+=30) {
