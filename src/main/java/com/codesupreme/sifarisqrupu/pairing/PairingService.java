@@ -609,6 +609,7 @@ public class PairingService {
         );
       }
       if (!g.scores.equals(request.scores())) {
+        s.rounds.get(round - 1).adminReadyNotified = false;
         g.scores = new LinkedHashMap<>(request.scores());
         g.confirmations.clear();
       }
@@ -627,8 +628,25 @@ public class PairingService {
         last.games.stream().allMatch(game -> game.confirmed)
       ) p.setStatus("COMPLETED");
     }
+    notifyAdminWhenReady(p, s);
     save(p, s);
     return view(p, s, user);
+  }
+
+  private void notifyAdminWhenReady(Pairing p, PairingState s) {
+    if (s.rounds.isEmpty() || p.getCreatedBy() == null ||
+      Set.of("COMPLETED", "CANCELLED").contains(p.getStatus())) return;
+    var round = s.rounds.get(s.rounds.size() - 1);
+    if ("FINAL".equals(round.stage) || round.adminReadyNotified ||
+      round.games.isEmpty() || !round.games.stream().allMatch(g -> g.confirmed)) return;
+    // A ready transition and its durable delivery commit with the score update.
+    round.adminReadyNotified = true;
+    p.setNotificationRound(p.getNotificationRound() + 1);
+    fcm.enqueue("ADMIN", List.of(p.getCreatedBy()), "🔵 Növbəti mərhələ hazırdır",
+      p.getTitle() + " — " + round.title + " hesabları təsdiqləndi. Növbəti mərhələni başlatmaq üçün toxunun.",
+      Map.of("scope", "pairing", "channel", "admin_pairing", "event", "round_ready",
+        "pairingId", p.getId(), "roundNumber", round.number, "screen", "PairingDetail"),
+      86400, "pairing-" + p.getId() + "-ready-" + round.number + "-" + p.getNotificationRound());
   }
 
   @Transactional
@@ -643,6 +661,7 @@ public class PairingService {
     if (round < s.rounds.size()) s.rounds = new ArrayList<>(
       s.rounds.subList(0, round)
     );
+    s.rounds.get(round - 1).adminReadyNotified = false;
     g.votes.clear();
     g.scores.clear();
     g.confirmations.clear();

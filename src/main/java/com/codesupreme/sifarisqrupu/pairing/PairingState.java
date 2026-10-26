@@ -17,6 +17,7 @@ public class PairingState {
     public List<Long> byes = new ArrayList<>();
     public long startedAt, endsAt;
     public List<Game> games = new ArrayList<>();
+    public boolean adminReadyNotified;
   }
 
   public static class Game {

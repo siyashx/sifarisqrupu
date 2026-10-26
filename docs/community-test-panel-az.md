@@ -25,3 +25,8 @@ Paneldə bildiriş müşahidəsi yalnız panel açıq ikən Firebase SDK-nın t�
 Hər iki tətbiqdə “(Siz)” çıxarılıb. Alqı-satqıda ağ “Pulsuz Elan Yerləşdir” düyməsi var. Bilet üçün WhatsApp mətni qiymət, cari hesabın adı və telefonunu ehtiva edir. Flutter, Android və iOS tətbiq versiyası 2.2.0, build 31-dir.
 
 Bu sessiyada istehsal serverinə deploy, Git push və mağaza üçün release build edilməyib.
+
+
+### Mərhələ hazır olduqda admin bildirişi
+Mərhələdə bütün oyunların hesabları təsdiqlənəndə yarışı yaradan adminin qoşulmuş cihazlarına “Növbəti mərhələ hazırdır” bildirişi yaradılır. Son final üçün bu bildiriş göndərilmir. Bildirişə toxunmaq həmin yarışın idarə səhifəsini açır. Eyni hazır mərhələ təkrar göndərilmir; admin nəticəni sıfırlayıb yenidən təsdiqlədərsə yeni hazır mərhələ bildirişi yaradıla bilər.
+Bu imkan üçün backend deploy olunmalı və yeni bildiriş kanalı və yönləndirmə üçün admin Android tətbiqi yenidən build edilməlidir. Zakaz Qrupu sınaq paneli də eyni bildiriş yolunu işlədir.

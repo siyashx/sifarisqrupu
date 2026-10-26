@@ -436,4 +436,62 @@ class PairingServiceTest {
     verify(repo, never()).saveAndFlush(any());
     assertEquals("DRAWING", db.get(id).getStatus());
   }
+  @Test
+  void nextStageReadyNotifiesTheResponsibleAdminOnlyAfterAllGamesAndOnlyOnce() throws Exception {
+    long id = create(8, 2);
+    service.start(id, new PairingService.Start(null, null, 60));
+    reveal(id);
+    clearInvocations(fcm);
+    var round = state(id).rounds.get(0);
+    var first = round.games.get(0);
+    var scores = Map.of(first.users.get(0), 4, first.users.get(1), 1);
+    service.result(id, 1, 0, null, new PairingService.Result(null, scores, 0), true);
+    verifyNoInteractions(fcm);
+    completeRound(id);
+    verify(fcm, times(1)).enqueue(eq("ADMIN"), eq(List.of(1L)), anyString(), anyString(),
+      argThat(d -> "round_ready".equals(d.get("event")) && Objects.equals(id, d.get("pairingId"))),
+      eq(86400), anyString());
+    service.result(id, 1, 0, null, new PairingService.Result(null, scores, 0), true);
+    service.detail(id, 1L);
+    verify(fcm, times(1)).enqueue(eq("ADMIN"), anyCollection(), anyString(), anyString(), anyMap(), anyInt(), anyString());
+    assertTrue(state(id).rounds.get(0).adminReadyNotified);
+    // A deliberate reset creates a new ready transition rather than duplicating the old event.
+    service.reset(id, 1, 0);
+    assertFalse(state(id).rounds.get(0).adminReadyNotified);
+    service.result(id, 1, 0, null, new PairingService.Result(null, scores, 1), true);
+    verify(fcm, times(2)).enqueue(eq("ADMIN"), anyCollection(), anyString(), anyString(), anyMap(), anyInt(), anyString());
+    service.start(id, new PairingService.Start(null, null, 60));
+    reveal(id);
+    clearInvocations(fcm);
+    completeRound(id);
+    verify(fcm, times(1)).enqueue(eq("ADMIN"), eq(List.of(1L)), anyString(), anyString(),
+      argThat(d -> Objects.equals(2, d.get("roundNumber"))), anyInt(), anyString());
+    service.start(id, new PairingService.Start(null, null, 60));
+    reveal(id);
+    clearInvocations(fcm);
+    completeRound(id);
+    assertEquals("COMPLETED", service.detail(id, 1L).get("status"));
+    verifyNoInteractions(fcm);
+  }
+
+  @Test
+  void onePlayerConfirmationDoesNotNotifyUntilTheOpponentConfirmsTheSameScores() throws Exception {
+    long id = create(4, 2);
+    service.start(id, new PairingService.Start(null, null, 60)); reveal(id);
+    var round = state(id).rounds.get(0);
+    var first = round.games.get(0);
+    service.result(id, 1, 0, null, new PairingService.Result(null, Map.of(first.users.get(0),4,first.users.get(1),1),0),true);
+    var second = round.games.get(1);
+    Long a = second.users.get(0), b = second.users.get(1);
+    service.result(id,1,1,a,new PairingService.Result("won",null,0),false);
+    service.result(id,1,1,b,new PairingService.Result("lost",null,0),false);
+    clearInvocations(fcm);
+    var scores = Map.of(a,4,b,1);
+    service.result(id,1,1,a,new PairingService.Result(null,scores,0),false);
+    verifyNoInteractions(fcm);
+    assertFalse(state(id).rounds.get(0).adminReadyNotified);
+    service.result(id,1,1,b,new PairingService.Result(null,scores,0),false);
+    verify(fcm,times(1)).enqueue(eq("ADMIN"),eq(List.of(1L)),anyString(),anyString(),anyMap(),anyInt(),anyString());
+  }
+
 }
