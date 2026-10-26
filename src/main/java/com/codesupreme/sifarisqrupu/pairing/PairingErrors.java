@@ -9,6 +9,7 @@ import org.springframework.web.server.ResponseStatusException;
   basePackages = {
     "com.codesupreme.sifarisqrupu.pairing",
     "com.codesupreme.sifarisqrupu.live",
+    "com.codesupreme.sifarisqrupu.community",
   }
 )
 public class PairingErrors {

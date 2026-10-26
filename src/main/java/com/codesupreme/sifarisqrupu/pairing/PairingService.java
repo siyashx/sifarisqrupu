@@ -163,7 +163,7 @@ public class PairingService {
         )
       );
     for (Long id : ids)
-      result.putIfAbsent(id, new Person(id, "İstifadəçi", null));
+      result.putIfAbsent(id, new Person(id, id < 0 ? "Sınaq iştirakçısı " + (-id) : "İstifadəçi", null));
     return result;
   }
 
@@ -462,6 +462,7 @@ public class PairingService {
       : override != null
         ? override
         : s.participants;
+    if(p.isTestMode()) ids = List.of(p.getTestUserId());
     int queued = 0;
     if (!"none".equals(audience)) {
       String eventId =
@@ -489,6 +490,17 @@ public class PairingService {
     return Map.of("queued", queued);
   }
 
+  @Transactional public Map<String,Object> createTest(Long target, int count, int seconds, Long admin, String requestId) {
+    require(Set.of(2,6,8).contains(count),"2, 6 və ya 8 iştirakçı seçin.");
+    require(users.findById(target).filter(u->!Boolean.TRUE.equals(u.getIsDisable())).isPresent(),"Sınaq hesabı tapılmadı.");
+    require(requestId!=null && requestId.matches("[a-zA-Z0-9-]{16,64}"),"Yanlış sınaq sorğusu.");
+    var old=repository.findByCreatedByAndRequestId(admin,requestId);
+    if(old.isPresent()){require(old.get().isTestMode() && Objects.equals(old.get().getTestUserId(),target),"Yanlış sınaq.");return view(old.get(),state(old.get()),target);}
+    duration(seconds,count/2);var p=new Pairing();p.setTitle("[Sınaq] "+count+" nəfərlik yarış");p.setDescription("Yalnız bu hesab üçün sınaq. Digər iştirakçılar virtualdır.");p.setCreatedAt(System.currentTimeMillis());p.setCreatedBy(admin);p.setRequestId(requestId);p.setGroupSize(2);p.setDurationSeconds(seconds);p.setTestMode(true);p.setTestUserId(target);
+    var s=new PairingState();s.participants.add(target);for(int i=1;i<count;i++)s.participants.add(-(long)i);save(p,s);return view(p,s,target);
+  }
+  @Transactional public void requireTest(Long id,Long admin) {var p=get(id);require(p.isTestMode() && Objects.equals(p.getCreatedBy(),admin),"Yalnız öz sınaq yarışınızı idarə edə bilərsiniz.");}
+  @Transactional public void revealTest(Long id,Long admin) {requireTest(id,admin);var p=locked(id);var s=state(p);require(!s.rounds.isEmpty() && "DRAWING".equals(p.getStatus()),"Canlı sınaq mərhələsi yoxdur.");var last=s.rounds.get(s.rounds.size()-1);last.startedAt=System.currentTimeMillis()-2000;last.endsAt=System.currentTimeMillis()-1;p.setStatus("RESULTS");save(p,s);}
   private Game game(PairingState s, int roundNumber, int index) {
     require(
       roundNumber > 0 && roundNumber <= s.rounds.size(),
@@ -688,6 +700,7 @@ public class PairingService {
   @Transactional(readOnly = true)
   public Map<String, Object> detail(Long id, Long user) {
     var p = get(id);
+    require(!p.isTestMode() || user == null || Objects.equals(user,p.getTestUserId()), "Sınaq yalnız seçilmiş hesab üçündür.");
     return view(p, state(p), user);
   }
 
@@ -696,6 +709,7 @@ public class PairingService {
     return repository
       .findByDeletedFalseOrderByCreatedAtDesc()
       .stream()
+      .filter(p -> !p.isTestMode() || user == null || Objects.equals(user,p.getTestUserId()))
       .filter(p -> user == null || !"CANCELLED".equals(p.getStatus()))
       .sorted(
         Comparator.comparingInt((Pairing p) ->
@@ -808,6 +822,7 @@ public class PairingService {
     );
     for (int i = 0; i < board.size(); i++) board.get(i).put("rank", i + 1);
     Map<String, Object> result = new LinkedHashMap<>();
+    result.put("testMode", p.isTestMode());
     result.put("id", p.getId());
     result.put("version", p.getVersion());
     result.put("title", p.getTitle());
