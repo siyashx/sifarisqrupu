@@ -47,6 +47,7 @@ public class Pairing {
 
   // Retired simulation rows stay excluded from all live features.
   @Column(nullable=false,columnDefinition="boolean default false") private boolean testMode;
+  @Column(nullable=false,columnDefinition="boolean default true") private boolean automatic=true;
   private boolean deleted;
   private int notificationRound;
 }

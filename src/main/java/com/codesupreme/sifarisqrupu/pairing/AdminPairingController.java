@@ -66,6 +66,11 @@ public class AdminPairingController {
     return service.edit(id, form);
   }
 
+  @PutMapping("/{id}/participants")
+  public Map<String,Object> participants(@RequestHeader("Authorization")String key,@PathVariable Long id,@RequestBody Map<String,List<Long>> form) {
+    auth.requireAdmin(key);return service.participants(id,form.get("userIds"));
+  }
+
   @PostMapping("/{id}/start")
   public Map<String, Object> start(
     @RequestHeader(value = "Authorization", required = false) String key,

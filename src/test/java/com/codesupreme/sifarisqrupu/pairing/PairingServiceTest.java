@@ -32,6 +32,7 @@ class PairingServiceTest {
     when(repo.saveAndFlush(any())).thenAnswer(i -> {
       Pairing p = i.getArgument(0);
       if (p.getId() == null) p.setId((long) db.size() + 1);
+      p.setAutomatic(false);
       db.put(p.getId(), p);
       return p;
     });

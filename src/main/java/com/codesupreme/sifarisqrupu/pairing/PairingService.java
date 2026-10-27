@@ -86,7 +86,7 @@ public class PairingService {
   private Pairing visible(Pairing p) {
     if (p.isDeleted() || p.isTestMode()) throw new ResponseStatusException(
       HttpStatus.NOT_FOUND,
-      "Cütləşmə tapılmadı."
+      "Çempionat tapılmadı."
     );
     return p;
   }
@@ -98,7 +98,7 @@ public class PairingService {
         .orElseThrow(() ->
           new ResponseStatusException(
             HttpStatus.NOT_FOUND,
-            "Cütləşmə tapılmadı."
+            "Çempionat tapılmadı."
           )
         )
     );
@@ -111,7 +111,7 @@ public class PairingService {
         .orElseThrow(() ->
           new ResponseStatusException(
             HttpStatus.NOT_FOUND,
-            "Cütləşmə tapılmadı."
+            "Çempionat tapılmadı."
           )
         )
     );
@@ -244,8 +244,9 @@ public class PairingService {
       if (old.isPresent()) return view(old.get(), state(old.get()), null);
     }
     var s = new PairingState();
-    s.participants = validateUsers(f.userIds(), f.groupSize());
-    duration(f.durationSeconds(), s.participants.size() / f.groupSize());
+    require(f.groupSize() >= 2 && f.groupSize() <= 8,"Qrup ölçüsü 2–8 olmalıdır.");
+    s.participants = f.userIds() == null || f.userIds().isEmpty() ? new ArrayList<>() : validateUsers(f.userIds(), f.groupSize());
+    duration(f.durationSeconds(), Math.max(1,s.participants.size() / f.groupSize()));
     var p = new Pairing();
     p.setTitle(clean(f.title()));
     p.setDescription(clean(f.description()));
@@ -264,7 +265,7 @@ public class PairingService {
     var s = state(p);
     require(
       !"DRAWING".equals(p.getStatus()),
-      "Cütləşmə zamanı redaktə bağlıdır."
+      "Çempionat zamanı redaktə bağlıdır."
     );
     require(
       !clean(f.title()).isEmpty() &&
@@ -273,7 +274,7 @@ public class PairingService {
       "Başlıq və açıqlamanı yoxlayın."
     );
     if (s.rounds.isEmpty()) {
-      s.participants = validateUsers(f.userIds(), f.groupSize());
+      s.participants = f.userIds() == null || f.userIds().isEmpty() ? new ArrayList<>() : validateUsers(f.userIds(), f.groupSize());
       p.setGroupSize(f.groupSize());
     }
     duration(
@@ -285,6 +286,14 @@ public class PairingService {
     p.setDescription(clean(f.description()));
     save(p, s);
     return view(p, s, null);
+  }
+
+  @Transactional
+  public Map<String,Object> participants(Long id,List<Long> ids) {
+    var p=locked(id);var s=state(p);
+    require(s.rounds.isEmpty() && "ACTIVE".equals(p.getStatus()),"İlk mərhələ artıq başlayıb. İştirakçıları dəyişmək olmaz.");
+    s.participants=validateUsers(ids,p.getGroupSize());p.setAutomatic(true);save(p,s);
+    return start(id,new Start(null,null,Math.max(p.getDurationSeconds(),s.participants.size()/p.getGroupSize()*3)));
   }
 
   @Transactional
@@ -470,7 +479,7 @@ public class PairingService {
         queued += fcm.enqueue(
           app,
           ids,
-          "live".equals(event) ? "🔵 Cütləşmə başlayır" : "🤝 Yeni cütləşmə",
+          "live".equals(event) ? "🔵 Çempionat başlayır" : "🤝 Yeni çempionat",
           p.getTitle() + " — İzləmək üçün bildirişə toxunun.",
           Map.of(
             "scope",
@@ -495,7 +504,7 @@ public class PairingService {
       "Mərhələ tapılmadı."
     );
     var r = s.rounds.get(roundNumber - 1);
-    require(index >= 0 && index < r.games.size(), "Cütləşmə tapılmadı.");
+    require(index >= 0 && index < r.games.size(), "Çempionat tapılmadı.");
     require(
       System.currentTimeMillis() >= revealAt(r, index),
       "Bu qrup hələ açıqlanmayıb."
@@ -516,7 +525,7 @@ public class PairingService {
     var s = state(p);
     require(
       !Set.of("COMPLETED", "CANCELLED").contains(p.getStatus()) || admin,
-      "Cütləşmə bağlanıb."
+      "Çempionat bağlanıb."
     );
     var g = game(s, round, index);
     require(admin || g.users.contains(user), "Bu qrupda iştirak etmirsiniz.");
@@ -616,8 +625,15 @@ public class PairingService {
         last.games.stream().allMatch(game -> game.confirmed)
       ) p.setStatus("COMPLETED");
     }
-    notifyAdminWhenReady(p, s);
+    if (!p.isAutomatic()) notifyAdminWhenReady(p, s);
     save(p, s);
+    if (p.isAutomatic() && !Set.of("COMPLETED","CANCELLED").contains(p.getStatus()) && !s.rounds.isEmpty()) {
+      var last=s.rounds.get(s.rounds.size()-1);
+      if (!"FINAL".equals(last.stage) && last.games.stream().allMatch(game -> game.confirmed)) {
+        p.setStatus("RESULTS");
+        return start(id,new Start(null,null,p.getDurationSeconds()));
+      }
+    }
     return view(p, s, user);
   }
 
@@ -672,7 +688,7 @@ public class PairingService {
     );
     require(
       !"DRAWING".equals(p.getStatus()),
-      "Əvvəl canlı cütləşməni gözləyin."
+      "Əvvəl canlı çempionatı gözləyin."
     );
     require(
       !s.rounds.isEmpty() || !"RESULTS".equals(status),
@@ -699,7 +715,7 @@ public class PairingService {
   @Transactional
   public void delete(Long id) {
     var p = locked(id);
-    require(!"DRAWING".equals(p.getStatus()), "Canlı cütləşməni silmək olmaz.");
+    require(!"DRAWING".equals(p.getStatus()), "Canlı çempionatı silmək olmaz.");
     p.setDeleted(true);
     save(p, state(p));
   }
