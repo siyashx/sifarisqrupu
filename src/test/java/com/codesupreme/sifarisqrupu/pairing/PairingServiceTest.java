@@ -510,4 +510,26 @@ class PairingServiceTest {
     verifyNoInteractions(fcm);
   }
 
+  @Test void adminCanFillOnlyMissingParticipantChoicesAndChoiceDoesNotFinishTheGame() throws Exception {
+    long id=create(2,2);service.start(id,new PairingService.Start(null,null,60));reveal(id);
+    var g=state(id).rounds.get(0).games.get(0);Long a=g.users.get(0),b=g.users.get(1);
+    service.adminChoice(id,1,0,a,new PairingService.Result("won",null,0));
+    assertEquals("won",state(id).rounds.get(0).games.get(0).votes.get(a));assertFalse(state(id).rounds.get(0).games.get(0).confirmed);
+    assertThrows(ResponseStatusException.class,()->service.adminChoice(id,1,0,a,new PairingService.Result("lost",null,0)));
+    assertThrows(ResponseStatusException.class,()->service.adminChoice(id,1,0,999L,new PairingService.Result("lost",null,0)));
+    service.adminChoice(id,1,0,b,new PairingService.Result("lost",null,0));
+    service.result(id,1,0,null,new PairingService.Result(null,Map.of(a,4,b,1),0),true);
+    var completed=state(id).rounds.get(0).games.get(0);assertTrue(completed.confirmed);assertEquals(a,completed.winnerId);
+    assertThrows(ResponseStatusException.class,()->service.adminChoice(id,1,0,a,new PairingService.Result("won",null,0)));
+  }
+  @Test void adminChoiceKeepsTheExistingConflictAndRevisionRules() throws Exception {
+    long id=create(2,2);service.start(id,new PairingService.Start(null,null,60));reveal(id);
+    var g=state(id).rounds.get(0).games.get(0);Long a=g.users.get(0),b=g.users.get(1);
+    service.adminChoice(id,1,0,a,new PairingService.Result("won",null,0));
+    service.adminChoice(id,1,0,b,new PairingService.Result("won",null,0));
+    assertTrue(state(id).rounds.get(0).games.get(0).votes.isEmpty());
+    assertEquals(1,state(id).rounds.get(0).games.get(0).revision);
+    assertThrows(ResponseStatusException.class,()->service.adminChoice(id,1,0,a,new PairingService.Result("won",null,0)));
+  }
+
 }

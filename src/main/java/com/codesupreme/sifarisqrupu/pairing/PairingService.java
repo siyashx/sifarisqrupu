@@ -513,6 +513,16 @@ public class PairingService {
   }
 
   @Transactional
+  public Map<String, Object> adminChoice(Long id,int round,int index,Long user,Result request) {
+    var p=locked(id);var s=state(p);var g=game(s,round,index);
+    require(!Set.of("COMPLETED","CANCELLED").contains(p.getStatus()),"Çempionat bağlanıb.");
+    require(g.users.contains(user),"İştirakçı bu oyunda deyil.");
+    require(!g.confirmed && !g.votes.containsKey(user),"Bu iştirakçı artıq seçim edib.");
+    require(request.scores()==null && Set.of("won","lost").contains(Objects.toString(request.choice(),"")),"Seçimi yoxlayın.");
+    return result(id,round,index,user,request,false);
+  }
+
+  @Transactional
   public Map<String, Object> result(
     Long id,
     int round,
@@ -610,7 +620,11 @@ public class PairingService {
         g.scores = new LinkedHashMap<>(request.scores());
         g.confirmations.clear();
       }
-      if (admin) g.confirmations.addAll(g.users);
+      if (admin) {
+        g.votes.clear();
+        for(Long uid:g.users) g.votes.put(uid,uid.equals(winner)?"won":"lost");
+        g.confirmations.addAll(g.users);
+      }
       else g.confirmations.add(user);
       if (g.confirmations.containsAll(g.users)) {
         g.confirmed = true;

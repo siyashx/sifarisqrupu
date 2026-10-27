@@ -27,6 +27,23 @@ class AdvertisingIntegrationTest {
   var saved=requests.findById(id).orElseThrow();saved.setEndsAt(System.currentTimeMillis()-1);requests.saveAndFlush(saved);
   assertTrue(((List<?>)service.feed("MOTO").get("items")).isEmpty());
  }
+ @Test void durationStartsAtApprovalEvenForAnOldPendingRequestOrAnOldClientsFutureDate(){
+  var p=plan("CHAT");var f=form(p,"approval-time-12345678");
+  var future=new AdvertisingService.RequestForm(f.kind(),f.channel(),f.planId(),f.listingId(),f.title(),f.description(),f.imageUrl(),f.targetType(),f.target(),System.currentTimeMillis()+86400000L,f.requestId(),f.planVersion());
+  var created=service.request(7L,future);long id=((Number)created.get("id")).longValue();
+  var pending=requests.findById(id).orElseThrow();pending.setCreatedAt(System.currentTimeMillis()-3*86400000L);pending.setRequestedStart(System.currentTimeMillis()+86400000L);requests.saveAndFlush(pending);
+  long before=System.currentTimeMillis();var approved=service.moderate(id,"approve");long after=System.currentTimeMillis();
+  long start=((Number)approved.get("startsAt")).longValue(),end=((Number)approved.get("endsAt")).longValue();
+  assertTrue(start>=before&&start<=after);assertEquals(24*3600000L,end-start);
+  assertEquals(approved.get("endsAt"),service.moderate(id,"approve").get("endsAt"));
+ }
+ @Test void pendingCountersExcludeApprovedRejectedAndOtherKinds(){
+  var chat=plan("CHAT");var shop=plan("SHOP");
+  var first=service.request(7L,form(chat,"pending-count-111111"));service.request(7L,form(chat,"pending-count-222222"));
+  service.request(7L,form(shop,"pending-count-333333"));
+  assertEquals(2,requests.countByKindAndStatus("CHAT","PENDING"));assertEquals(1,requests.countByKindAndStatus("SHOP","PENDING"));
+  service.moderate(((Number)first.get("id")).longValue(),"approve");assertEquals(1,requests.countByKindAndStatus("CHAT","PENDING"));
+ }
  @Test void visitsAreRealDailyUniqueUsersAcrossBothApps(){service.visit(7L);service.visit(7L);assertEquals(2L,service.visit(8L).get("count"));assertEquals(2L,service.feed("MOTO").get("visitors"));}
  @Test void linksRejectScriptsCredentialsAndInvalidPlans(){for(String v:List.of("javascript:alert(1)","http://example.com","https://u:p@example.com","file:///tmp/a"))assertFalse(AdvertisingService.validLink(v));assertTrue(AdvertisingService.validLink("https://example.com/shop?q=1"));var p=plan("CHAT");service.deletePlan(p.getId());assertThrows(ResponseStatusException.class,()->service.request(7L,form(p,"disabled-plan-12345678")));}
 }

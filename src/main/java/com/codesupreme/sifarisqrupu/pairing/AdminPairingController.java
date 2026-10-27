@@ -127,6 +127,14 @@ public class AdminPairingController {
     return service.result(id, round, game, null, result, true);
   }
 
+  @PostMapping("/{id}/rounds/{round}/games/{game}/users/{userId}/choice")
+  public Map<String,Object> choice(@RequestHeader(value="Authorization",required=false)String key,
+      @PathVariable Long id,@PathVariable int round,@PathVariable int game,@PathVariable Long userId,
+      @RequestBody PairingService.Result request) {
+    auth.requireAdmin(key);
+    return service.adminChoice(id,round,game,userId,request);
+  }
+
   @PostMapping("/{id}/rounds/{round}/games/{game}/reset")
   public Map<String, Object> reset(
     @RequestHeader(value = "Authorization", required = false) String key,
