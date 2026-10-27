@@ -1,6 +1,5 @@
 package com.codesupreme.sifarisqrupu.push;
 import com.codesupreme.sifarisqrupu.dao.user.UserRepository;
-import com.codesupreme.sifarisqrupu.dao.chat_group.ChatGroupRepository;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -12,11 +11,10 @@ public class AdminPushController {
     private final PushDeviceRepository devices;
     private final FcmPushService fcm;
     private final UserRepository users;
-    private final ChatGroupRepository groups;
     private final PushAudienceService audience;
     public AdminPushController(AdminPushAuth auth,PushDeviceRepository devices,FcmPushService fcm,UserRepository users,
-        ChatGroupRepository groups,PushAudienceService audience) {
-        this.auth=auth;this.devices=devices;this.fcm=fcm;this.users=users;this.groups=groups;this.audience=audience;
+        PushAudienceService audience) {
+        this.auth=auth;this.devices=devices;this.fcm=fcm;this.users=users;this.audience=audience;
     }
     public record DeviceRequest(String installationId,String token,boolean enabled) {}
     public record RevokeRequest(String installationId) {}
@@ -47,14 +45,19 @@ public class AdminPushController {
     public Map<String,Integer> send(@RequestHeader(value="Authorization",required=false) String authorization,@RequestBody SendRequest r) {
         var admin=auth.requireAdmin(authorization);
         if(!fcm.isEnabled()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"FCM disabled");
-        if(r.kind()==null || !Set.of("group","shop","community","notice","verification_result").contains(r.kind()) ||
-            r.userIds()==null || r.userIds().isEmpty() || r.userIds().size()>10000) throw new IllegalArgumentException();
+        if(r.kind()==null || !Set.of("group","shop","moto_chat","notice","verification_result").contains(r.kind()) ||
+            (!"moto_chat".equals(r.kind()) && (r.userIds()==null || r.userIds().isEmpty())) || (r.userIds()!=null && r.userIds().size()>10000)) throw new IllegalArgumentException();
         String title=PushController.limit(r.title(),120),body=PushController.limit(r.body(),550);
         if(body.isBlank()) throw new IllegalArgumentException();
         String event=PushController.requestId(r.requestId(),"admin-"+admin.getId());
-        List<Long> ids=r.userIds().stream().filter(Objects::nonNull).distinct().toList();
+        List<Long> ids=r.userIds()==null ? null : r.userIds().stream().filter(Objects::nonNull).distinct().toList();
         int queued=0;
-        if("verification_result".equals(r.kind()) || "notice".equals(r.kind())) {
+        if("moto_chat".equals(r.kind())) {
+            for(String app:List.of("ZAKAZ","ELEHBER")) {
+                var eligible=audience.select(app,"moto_chat",null,ids,false);
+                queued+=fcm.enqueue(app,eligible,title,body,PushAudienceService.payload(app,"moto_chat"),300,event+"-"+app);
+            }
+        } else if("verification_result".equals(r.kind()) || "notice".equals(r.kind())) {
             var eligible=users.findAllById(ids).stream().filter(u->!Boolean.TRUE.equals(u.getIsDisable()))
                 .filter(u->!"verification_result".equals(r.kind()) || Set.of("accept","decline").contains(Objects.toString(u.getCourierStatus(),"")))
                 .map(u->u.getId()).toList();
@@ -64,13 +67,6 @@ public class AdminPushController {
             String kind="shop".equals(r.kind()) ? "shop":"group";
             var eligible=audience.select("ZAKAZ",kind,null,ids,true);
             Map<String,Object> payload=PushAudienceService.payload("ZAKAZ",kind);
-            if("community".equals(r.kind())) {
-                var group=groups.findById(Objects.requireNonNull(r.groupId())).orElseThrow(IllegalArgumentException::new);
-                var joined=group.getJoinedUserIds();var muted=group.getMutedUserIds();
-                eligible=users.findAllById(ids).stream().filter(u->!Boolean.TRUE.equals(u.getIsDisable()))
-                    .map(u->u.getId()).filter(id->joined!=null && joined.contains(id) && (muted==null || !muted.contains(id))).toList();
-                payload=Map.of("screen",PushController.limit(r.screen(),80),"groupId",r.groupId(),"channel","shop");
-            }
             queued=fcm.enqueue("ZAKAZ",eligible,title,body,payload,300,event+"-ZAKAZ");
         }
         return Map.of("queued",queued);

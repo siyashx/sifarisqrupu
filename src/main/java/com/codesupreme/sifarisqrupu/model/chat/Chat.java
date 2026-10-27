@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 @Entity
-@Table(name = "chat")
+@Table(name = "chat", indexes = @Index(name = "idx_chat_group_id_id", columnList = "group_id,id"))
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -21,6 +21,7 @@ public class Chat {
     private Long id;
 
     private Long userId;
+    @Column(name = "group_id")
     private String groupId;
     private String username;
     private String phone;
