@@ -44,6 +44,20 @@ class AdvertisingIntegrationTest {
   assertEquals(2,requests.countByKindAndStatus("CHAT","PENDING"));assertEquals(1,requests.countByKindAndStatus("SHOP","PENDING"));
   service.moderate(((Number)first.get("id")).longValue(),"approve");assertEquals(1,requests.countByKindAndStatus("CHAT","PENDING"));
  }
+ @Test void ownChatAdsIncludePendingAndHistoryButNeverAnotherUsersRequestsOrAnotherChannel(){
+  var plan=plan("CHAT");
+  long first=((Number)service.request(7L,form(plan,"own-ad-request-111111")).get("id")).longValue();
+  service.request(99L,new AdvertisingService.RequestForm("CHAT","MOTO",plan.getId(),null,"Private other ad","",null,"LINK","https://example.com",0,"other-user-request-11111",null));
+  service.request(7L,new AdvertisingService.RequestForm("CHAT","SUSHI",plan.getId(),null,"Sushi ad","",null,"WHATSAPP",null,0,"other-channel-1111111",null));
+  var rows=(List<Map<String,Object>>)service.mine(7L,"MOTO").get("items");
+  assertEquals(1,rows.size());assertEquals(first,rows.get(0).get("id"));assertEquals("PENDING",rows.get(0).get("displayStatus"));assertFalse(rows.get(0).containsKey("user"));
+  service.moderate(first,"approve");
+  assertEquals("APPROVED",((List<Map<String,Object>>)service.mine(7L,"MOTO").get("items")).get(0).get("displayStatus"));
+  var saved=requests.findById(first).orElseThrow();saved.setEndsAt(System.currentTimeMillis()-1000);requests.saveAndFlush(saved);
+  assertEquals("EXPIRED",((List<Map<String,Object>>)service.mine(7L,"MOTO").get("items")).get(0).get("displayStatus"));
+  assertTrue(((List<?>)service.feed("MOTO").get("items")).stream().map(v->(Map<?,?>)v).noneMatch(v->Objects.equals(v.get("id"),first)));
+  assertThrows(ResponseStatusException.class,()->service.mine(7L,"INVALID"));
+ }
  @Test void entriesCountEveryVisitAndShareEachSectionAcrossBothApps(){
   assertEquals(1L,service.visit(7L,"SHOP").get("count"));
   assertEquals(2L,service.visit(7L,"SHOP").get("count"));

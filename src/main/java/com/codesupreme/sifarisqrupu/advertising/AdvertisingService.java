@@ -30,6 +30,16 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;import org.sprin
  public Map<String,Object> view(AdRequest a){return view(a,true);}
  private Map<String,Object> view(AdRequest a,boolean contact){var u=contact?users.findById(a.getUserId()).orElse(null):null;var r=new LinkedHashMap<String,Object>();r.put("id",a.getId());r.put("kind",a.getKind());r.put("channel",a.getChannel());r.put("listingId",a.getListingId());r.put("title",a.getTitle());r.put("description",a.getDescription());r.put("imageUrl",a.getImageUrl());r.put("targetType",a.getTargetType());r.put("target",a.getTarget());r.put("status",a.getStatus());r.put("planLabel",a.getPlanLabel());r.put("price",a.getPrice());r.put("durationHours",a.getDurationHours());r.put("createdAt",a.getCreatedAt());r.put("requestedStart",a.getRequestedStart());r.put("startsAt",a.getStartsAt());r.put("endsAt",a.getEndsAt());if(contact)r.put("user",Map.of("id",a.getUserId(),"name",u==null?"İstifadəçi":Objects.toString(u.getName(),""),"phoneNumber",u==null?"":Objects.toString(u.getPhoneNumber(),"")));return r;}
  @Transactional(readOnly=true) public List<Map<String,Object>> all(){return requests.findAllByOrderByCreatedAtDesc().stream().map(this::view).toList();}
+ @Transactional(readOnly=true) public Map<String,Object> mine(Long user,String channel){
+   require(Set.of("SUSHI","MOTO").contains(channel),"Çat bölməsini yoxlayın.");
+   long now=System.currentTimeMillis();
+   var rows=requests.findTop50ByUserIdAndKindAndChannelOrderByCreatedAtDescIdDesc(user,"CHAT",channel).stream().map(a->{
+     var result=view(a,false);
+     result.put("displayStatus","APPROVED".equals(a.getStatus()) && a.getEndsAt()!=null && a.getEndsAt()<=now?"EXPIRED":a.getStatus());
+     return result;
+   }).toList();
+   return Map.of("items",rows,"serverNow",now);
+ }
  @Transactional(readOnly=true) public Map<String,Object> feed(String channel){
    require("SUSHI".equals(channel)||"MOTO".equals(channel),"Çat bölməsini yoxlayın.");
    long now=System.currentTimeMillis();String day=LocalDate.now(ZoneId.of("Asia/Baku")).toString();
