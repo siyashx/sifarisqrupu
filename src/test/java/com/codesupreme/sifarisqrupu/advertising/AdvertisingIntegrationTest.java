@@ -7,7 +7,7 @@ import org.junit.jupiter.api.*;import org.springframework.beans.factory.annotati
 @ContextConfiguration(classes=AdvertisingIntegrationTest.Config.class)
 class AdvertisingIntegrationTest {
  @Configuration @EntityScan(basePackageClasses=AdRequest.class) @EnableJpaRepositories(basePackageClasses=AdRequestRepository.class) @Import(AdvertisingService.class) static class Config {}
- @Autowired AdvertisingService service;@Autowired AdRequestRepository requests;@Autowired AdPlanRepository plans;@MockBean UserRepository users;@MockBean ElanRepository listings;@MockBean FcmPushService fcm;@MockBean SimpMessagingTemplate events;
+ @Autowired SectionDailyVisitRepository sectionVisits;@Autowired AdvertisingService service;@Autowired AdRequestRepository requests;@Autowired AdPlanRepository plans;@MockBean UserRepository users;@MockBean ElanRepository listings;@MockBean FcmPushService fcm;@MockBean SimpMessagingTemplate events;
  @BeforeEach void setup(){when(users.findById(7L)).thenReturn(Optional.of(User.builder().id(7L).name("Seller").phoneNumber("055 123-45-67").password("private").build()));when(listings.findById(8L)).thenReturn(Optional.of(Elan.builder().id(8L).title("Məhsul").userId(99L).isDisable(false).build()));}
  AdPlan plan(String kind){return service.savePlan(null,new AdvertisingService.PlanForm(kind,"1 gün",24,new BigDecimal("5.00"),null,null,true));}
  AdvertisingService.RequestForm form(AdPlan p,String key){return new AdvertisingService.RequestForm(p.getKind(),"MOTO",p.getId(),8L,"Başlıq","Açıqlama",null,"WHATSAPP",null,System.currentTimeMillis(),key,p.getVersion());}
@@ -44,6 +44,26 @@ class AdvertisingIntegrationTest {
   assertEquals(2,requests.countByKindAndStatus("CHAT","PENDING"));assertEquals(1,requests.countByKindAndStatus("SHOP","PENDING"));
   service.moderate(((Number)first.get("id")).longValue(),"approve");assertEquals(1,requests.countByKindAndStatus("CHAT","PENDING"));
  }
- @Test void visitsAreRealDailyUniqueUsersAcrossBothApps(){service.visit(7L);service.visit(7L);assertEquals(2L,service.visit(8L).get("count"));assertEquals(2L,service.feed("MOTO").get("visitors"));}
+ @Test void entriesCountEveryVisitAndShareEachSectionAcrossBothApps(){
+  assertEquals(1L,service.visit(7L,"SHOP").get("count"));
+  assertEquals(2L,service.visit(7L,"SHOP").get("count"));
+  assertEquals(3L,service.visit(8L).get("count"));
+  assertEquals(1L,service.visit(7L,"SUSHI").get("count"));
+  assertEquals(2L,service.visit(7L,"SUSHI").get("count"));
+  assertEquals(1L,service.visit(7L,"MOTO").get("count"));
+  for(String channel:List.of("SUSHI","MOTO")){
+   var feed=service.feed(channel);
+   assertEquals(3L,feed.get("visitors"));
+   assertEquals(Map.of("SHOP",3L,"SUSHI",2L,"MOTO",1L),feed.get("sectionVisits"));
+  }
+  assertThrows(ResponseStatusException.class,()->service.visit(7L,"INVALID"));
+ }
+ @Test void sectionEntriesResetOnBakuDayAndDoNotReuseOldUniqueVisitorRows(){
+  var yesterday=new SectionDailyVisit();yesterday.setId("2020-01-01-SHOP");yesterday.setVisitDay("2020-01-01");yesterday.setSection("SHOP");yesterday.setEntryCount(77);
+  sectionVisits.saveAndFlush(yesterday);
+  assertEquals(1L,service.visit(7L,"SHOP").get("count"));
+  assertEquals(java.time.LocalDate.now(java.time.ZoneId.of("Asia/Baku")).toString(),service.visit(7L,"MOTO").get("day"));
+ }
+
  @Test void linksRejectScriptsCredentialsAndInvalidPlans(){for(String v:List.of("javascript:alert(1)","http://example.com","https://u:p@example.com","file:///tmp/a"))assertFalse(AdvertisingService.validLink(v));assertTrue(AdvertisingService.validLink("https://example.com/shop?q=1"));var p=plan("CHAT");service.deletePlan(p.getId());assertThrows(ResponseStatusException.class,()->service.request(7L,form(p,"disabled-plan-12345678")));}
 }

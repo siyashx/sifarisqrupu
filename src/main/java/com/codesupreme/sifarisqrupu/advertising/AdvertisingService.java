@@ -10,9 +10,9 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;import org.sprin
  private record CachedFeed(long loadedAt,String day,Map<String,Object> value){}
  private final java.util.concurrent.ConcurrentHashMap<String,CachedFeed> feedCache=new java.util.concurrent.ConcurrentHashMap<>();
  private final List<Long> adminRecipients;
- private final AdPlanRepository plans;private final AdRequestRepository requests;private final AdVisitRepository visits;
+ private final AdPlanRepository plans;private final AdRequestRepository requests;private final SectionDailyVisitRepository visits;
  private final UserRepository users;private final ElanRepository listings;private final FcmPushService fcm;private final SimpMessagingTemplate events;
- public AdvertisingService(AdPlanRepository p,AdRequestRepository r,AdVisitRepository v,UserRepository u,ElanRepository e,FcmPushService f,SimpMessagingTemplate s,@org.springframework.beans.factory.annotation.Value("${push.admin.recipient-ids:1}") String recipientIds){adminRecipients=Arrays.stream(recipientIds.split(",")).map(String::trim).filter(value->value.matches("[1-9][0-9]*")).map(Long::parseLong).distinct().toList();plans=p;requests=r;visits=v;users=u;listings=e;fcm=f;events=s;}
+ public AdvertisingService(AdPlanRepository p,AdRequestRepository r,SectionDailyVisitRepository v,UserRepository u,ElanRepository e,FcmPushService f,SimpMessagingTemplate s,@org.springframework.beans.factory.annotation.Value("${push.admin.recipient-ids:1}") String recipientIds){adminRecipients=Arrays.stream(recipientIds.split(",")).map(String::trim).filter(value->value.matches("[1-9][0-9]*")).map(Long::parseLong).distinct().toList();plans=p;requests=r;visits=v;users=u;listings=e;fcm=f;events=s;}
  public record PlanForm(String kind,String label,int durationHours,BigDecimal price,Long availableFrom,Long availableUntil,boolean enabled){}
  public record RequestForm(String kind,String channel,Long planId,Long listingId,String title,String description,String imageUrl,String targetType,String target,long requestedStart,String requestId,Long planVersion){}
  private static void require(boolean ok,String message){if(!ok)throw new ResponseStatusException(HttpStatus.CONFLICT,message);}
@@ -42,8 +42,21 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;import org.sprin
    var validListings=listings.findAllById(listingIds).stream().filter(e->!Boolean.TRUE.equals(e.getIsDisable())).map(e->e.getId()).collect(java.util.stream.Collectors.toSet());
    var rows=active.stream().filter(a->"SHOP".equals(a.getKind())||Objects.equals(channel,a.getChannel()))
      .filter(a->!"SHOP".equals(a.getKind())||validListings.contains(a.getListingId())).map(a->view(a,false)).toList();
-   return Map.of("items",rows,"plans",plans(false),"visitors",visits.countByVisitDay(day),"serverNow",now);
+   var counts = new LinkedHashMap<String,Long>();
+   for (String section : List.of("SHOP","SUSHI","MOTO")) counts.put(section,0L);
+   for (var entry : visits.findByVisitDay(day)) counts.put(entry.getSection(),entry.getEntryCount());
+   return Map.of("items",rows,"plans",plans(false),"visitors",counts.get("SHOP"),"sectionVisits",counts,"visitDay",day,"serverNow",now);
  }
- @Transactional public Map<String,Object> visit(Long user){if(visits.recordVisit(LocalDate.now(ZoneId.of("Asia/Baku")).toString(),user)>0){feedCache.clear();if(TransactionSynchronizationManager.isSynchronizationActive())TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){public void afterCommit(){feedCache.clear();}});}return Map.of("count",visits.countByVisitDay(LocalDate.now(ZoneId.of("Asia/Baku")).toString()));}
+ @Transactional public Map<String,Object> visit(Long user){return visit(user,"SHOP");}
+ @Transactional public Map<String,Object> visit(Long user,String section){
+   require(Set.of("SHOP","SUSHI","MOTO").contains(section),"Bölməni yoxlayın.");
+   String day=LocalDate.now(ZoneId.of("Asia/Baku")).toString(),id=day+"-"+section;
+   visits.increment(id,day,section);
+   long count=visits.entryCount(id);
+   feedCache.clear();
+   if(TransactionSynchronizationManager.isSynchronizationActive())TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){public void afterCommit(){feedCache.clear();}});
+   return Map.of("section",section,"day",day,"count",count,"serverNow",System.currentTimeMillis());
+ }
+
  @Transactional public Map<String,Object> moderate(Long id,String action){var a=requests.lock(id).orElseThrow();require(Set.of("approve","reject","withdraw").contains(action),"Əməliyyatı yoxlayın.");if("approve".equals(action)){require(!"REJECTED".equals(a.getStatus())&&!"CANCELLED".equals(a.getStatus()),"Rədd edilmiş sorğu aktivləşdirilə bilməz.");if(!"APPROVED".equals(a.getStatus())){if("SHOP".equals(a.getKind()))require(listings.findById(a.getListingId()).map(e->!Boolean.TRUE.equals(e.getIsDisable())).orElse(false),"Elan aktiv deyil.");long start=System.currentTimeMillis();a.setStartsAt(start);a.setEndsAt(start+a.getDurationHours()*3600000L);a.setStatus("APPROVED");}}else a.setStatus("reject".equals(action)?"REJECTED":"CANCELLED");requests.saveAndFlush(a);changed();return view(a);}
 }

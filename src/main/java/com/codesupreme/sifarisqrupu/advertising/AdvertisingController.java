@@ -3,6 +3,6 @@ import com.codesupreme.sifarisqrupu.push.*;import java.util.*;import org.springf
 @RestController @RequestMapping("/api/v5/advertising") public class AdvertisingController {
  private final PushAuth auth;private final AdvertisingService service;public AdvertisingController(PushAuth a,AdvertisingService s){auth=a;service=s;}
  @GetMapping("/feed") public Map<String,Object> feed(@RequestHeader("Authorization")String key,@RequestParam(defaultValue="SUSHI")String channel){auth.requireUser(key);return service.feed(channel);}
- @PostMapping("/visit") public Map<String,Object> visit(@RequestHeader("Authorization")String key){return service.visit(auth.requireUser(key).getId());}
+ @PostMapping("/visit") public Map<String,Object> visit(@RequestHeader("Authorization")String key,@RequestParam(defaultValue="SHOP")String section){return service.visit(auth.requireUser(key).getId(),section);}
  @PostMapping("/requests") public Map<String,Object> request(@RequestHeader("Authorization")String key,@RequestBody AdvertisingService.RequestForm f){return service.request(auth.requireUser(key).getId(),f);}
 }
