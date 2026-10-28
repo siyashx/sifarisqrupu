@@ -199,27 +199,20 @@ public class PairingService {
     );
   }
 
+  private List<Long> validateRoster(List<Long> ids) {
+    require(ids != null && ids.size() <= 256 && ids.stream().noneMatch(Objects::isNull), "Ən çox 256 iştirakçı seçin.");
+    var distinct = new ArrayList<>(new LinkedHashSet<>(ids));
+    require(distinct.size() == ids.size(), "Eyni iştirakçı iki dəfə seçilə bilməz.");
+    if (ids.isEmpty()) return distinct;
+    var selected = users.findAllById(ids);
+    require(selected.size() == ids.size() && selected.stream().noneMatch(u -> Boolean.TRUE.equals(u.getIsDisable())), "İştirakçılardan biri mövcud deyil və ya deaktivdir.");
+    return distinct;
+  }
   private List<Long> validateUsers(List<Long> ids, int groupSize) {
     require(groupSize >= 2 && groupSize <= 8, "Qrup ölçüsü 2–8 olmalıdır.");
-    require(
-      ids != null &&
-        ids.size() >= groupSize &&
-        ids.size() <= 256 &&
-        ids.stream().noneMatch(Objects::isNull),
-      "2–256 iştirakçı seçin."
-    );
-    var distinct = new ArrayList<>(new LinkedHashSet<>(ids));
-    require(
-      distinct.size() == ids.size() && ids.size() % groupSize == 0,
-      "İştirakçı sayı qrup ölçüsünə tam bölünməlidir."
-    );
-    var selected = users.findAllById(ids);
-    require(
-      selected.size() == ids.size() &&
-        selected.stream().noneMatch(u -> Boolean.TRUE.equals(u.getIsDisable())),
-      "İştirakçılardan biri mövcud deyil və ya deaktivdir."
-    );
-    return distinct;
+    var selected = validateRoster(ids);
+    require(selected.size() >= groupSize && selected.size() % groupSize == 0, "Mərhələni başlatmaq üçün iştirakçı sayı qrup ölçüsünə tam bölünməlidir.");
+    return selected;
   }
 
   private void duration(int value, int groups) {
@@ -245,8 +238,8 @@ public class PairingService {
     }
     var s = new PairingState();
     require(f.groupSize() >= 2 && f.groupSize() <= 8,"Qrup ölçüsü 2–8 olmalıdır.");
-    s.participants = f.userIds() == null || f.userIds().isEmpty() ? new ArrayList<>() : validateUsers(f.userIds(), f.groupSize());
-    duration(f.durationSeconds(), Math.max(1,s.participants.size() / f.groupSize()));
+    s.participants = f.userIds() == null || f.userIds().isEmpty() ? new ArrayList<>() : validateRoster(f.userIds());
+    duration(f.durationSeconds(), 1);
     var p = new Pairing();
     p.setTitle(clean(f.title()));
     p.setDescription(clean(f.description()));
@@ -274,12 +267,13 @@ public class PairingService {
       "Başlıq və açıqlamanı yoxlayın."
     );
     if (s.rounds.isEmpty()) {
-      s.participants = f.userIds() == null || f.userIds().isEmpty() ? new ArrayList<>() : validateUsers(f.userIds(), f.groupSize());
+      require(f.groupSize() >= 2 && f.groupSize() <= 8, "Qrup ölçüsü 2–8 olmalıdır.");
+      s.participants = f.userIds() == null || f.userIds().isEmpty() ? new ArrayList<>() : validateRoster(f.userIds());
       p.setGroupSize(f.groupSize());
     }
     duration(
       f.durationSeconds(),
-      Math.max(1, s.participants.size() / p.getGroupSize())
+      s.rounds.isEmpty() ? 1 : Math.max(1, s.participants.size() / p.getGroupSize())
     );
     p.setDurationSeconds(f.durationSeconds());
     p.setTitle(clean(f.title()));
@@ -292,8 +286,8 @@ public class PairingService {
   public Map<String,Object> participants(Long id,List<Long> ids) {
     var p=locked(id);var s=state(p);
     require(s.rounds.isEmpty() && "ACTIVE".equals(p.getStatus()),"İlk mərhələ artıq başlayıb. İştirakçıları dəyişmək olmaz.");
-    s.participants=validateUsers(ids,p.getGroupSize());p.setAutomatic(true);save(p,s);
-    return start(id,new Start(null,null,Math.max(p.getDurationSeconds(),s.participants.size()/p.getGroupSize()*3)));
+    s.participants=validateRoster(ids);p.setAutomatic(true);save(p,s);
+    return view(p,s,null);
   }
 
   @Transactional
@@ -314,7 +308,7 @@ public class PairingService {
     );
     List<Long> selected;
     List<Long> placement = new ArrayList<>();
-    if (s.rounds.isEmpty()) selected = new ArrayList<>(s.participants);
+    if (s.rounds.isEmpty()) selected = validateUsers(s.participants,p.getGroupSize());
     else {
       var previous = s.rounds.get(s.rounds.size() - 1);
       require(
@@ -557,7 +551,18 @@ public class PairingService {
         g.confirmations.clear();
         g.revision++;
         g.notice = "Seçimlər uyğun gəlmədi. Yenidən seçin.";
-      } else g.notice = "";
+      } else {
+        g.notice = "";
+        if (!g.scores.isEmpty()) {
+          var scoredWinner = Collections.max(g.scores.entrySet(), Map.Entry.comparingByValue()).getKey();
+          boolean compatible = g.votes.entrySet().stream().allMatch(v ->
+            Objects.equals(v.getValue(), v.getKey().equals(scoredWinner) ? "won" : "lost"));
+          if (!compatible) {
+            g.scores.clear();
+            g.confirmations.clear();
+          }
+        }
+      }
     }
     if (admin && request.scores() != null && round < s.rounds.size()) {
       require(
@@ -577,43 +582,15 @@ public class PairingService {
             .allMatch(v -> v != null && v >= 0 && v <= 999),
         "Hər iştirakçı üçün 0–999 arasında hesab yazın."
       );
-      Long winner;
-      if (admin) {
-        int max = Collections.max(request.scores().values());
-        var first = request
-          .scores()
-          .entrySet()
-          .stream()
-          .filter(e -> e.getValue() == max)
-          .toList();
-        require(
-          first.size() == 1,
-          "Bir qalib olmalıdır; hesab bərabər qala bilməz."
-        );
-        winner = first.get(0).getKey();
-      } else {
-        require(
-          g.votes.size() == g.users.size() &&
-            g.votes.values().stream().filter("won"::equals).count() == 1,
-          "Əvvəl bütün iştirakçılar uddu/uduzdu seçsin."
-        );
-        winner = g.votes
-          .entrySet()
-          .stream()
-          .filter(e -> "won".equals(e.getValue()))
-          .findFirst()
-          .orElseThrow()
-          .getKey();
-        require(
-          g.users
-            .stream()
-            .allMatch(
-              u ->
-                u.equals(winner) ||
-                request.scores().get(winner) > request.scores().get(u)
-            ),
-          "Hesab seçilmiş qalibə uyğun deyil."
-        );
+      int max = Collections.max(request.scores().values());
+      var first = request.scores().entrySet().stream().filter(e -> e.getValue() == max).toList();
+      require(first.size() == 1,"Bir qalib olmalıdır; hesab bərabər qala bilməz.");
+      Long winner = first.get(0).getKey();
+      if (!admin) {
+        require(g.votes.containsKey(user),"Əvvəl uddum və ya uduzdum seçin.");
+        require(g.votes.entrySet().stream().allMatch(v ->
+          Objects.equals(v.getValue(), v.getKey().equals(winner) ? "won" : "lost")),
+          "Hesab seçilmiş nəticəyə uyğun deyil.");
       }
       if (!g.scores.equals(request.scores())) {
         s.rounds.get(round - 1).adminReadyNotified = false;

@@ -148,10 +148,14 @@ class PairingIntegrationTest {
     assertTrue(finalState.rounds.get(0).games.get(0).votes.isEmpty());
     assertEquals(1, finalState.rounds.get(0).games.get(0).revision);
   }
-  @Test void automaticChampionshipRunsFromParticipantSelectionThroughFinal() throws Exception {
+  @Test void championshipWaitsForManualFirstStartThenProgressesAutomatically() throws Exception {
     long id=((Number)service.create(new PairingService.Form("PES","",2,List.of(),30,"auto-championship-1234"),1L).get("id")).longValue();
     assertTrue(((List<?>)service.detail(id,1L).get("rounds")).isEmpty());
+    service.participants(id,List.of(1L));
+    assertTrue(((List<?>)service.detail(id,1L).get("rounds")).isEmpty());
     service.participants(id,List.of(1L,2L,3L,4L,5L,6L,7L,8L));
+    assertTrue(((List<?>)service.detail(id,1L).get("rounds")).isEmpty());
+    service.start(id,new PairingService.Start(null,null,30));
     for(int n=1;n<=3;n++){
       var entity=repo.findById(id).orElseThrow();var state=json.readValue(entity.getStateJson(),PairingState.class);
       assertEquals(n,state.rounds.size());var r=state.rounds.get(n-1);r.startedAt=1;r.endsAt=2;entity.setStateJson(json.writeValueAsString(state));repo.saveAndFlush(entity);service.finishAnimation(id);

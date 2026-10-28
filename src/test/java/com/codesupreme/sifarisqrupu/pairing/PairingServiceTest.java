@@ -115,6 +115,17 @@ class PairingServiceTest {
     }
   }
 
+  @Test void rosterCanBeSavedAndExtendedWithoutStartingOrSendingLiveNotifications() throws Exception {
+    long id=create(0,2);
+    service.participants(id,List.of(1L));assertEquals(List.of(1L),state(id).participants);assertTrue(state(id).rounds.isEmpty());assertEquals("ACTIVE",db.get(id).getStatus());
+    service.participants(id,List.of(1L,2L,3L));assertEquals(3,state(id).participants.size());assertTrue(state(id).rounds.isEmpty());
+    assertThrows(ResponseStatusException.class,()->service.start(id,new PairingService.Start(null,null,60)));
+    verifyNoInteractions(fcm);
+    service.participants(id,List.of(1L,2L,3L,4L));assertTrue(state(id).rounds.isEmpty());
+    service.start(id,new PairingService.Start(null,null,60));assertEquals(1,state(id).rounds.size());assertEquals("DRAWING",db.get(id).getStatus());
+    assertThrows(ResponseStatusException.class,()->service.participants(id,List.of(1L,2L)));
+  }
+
   @Test
   void fullEightPlayerBracketHasFinalThirdPlaceAndThreePointWins()
     throws Exception {
@@ -247,6 +258,48 @@ class PairingServiceTest {
   }
 
   @Test
+  void firstParticipantCanConfirmScoresBeforeOthersChooseTheirResult() throws Exception {
+    for(boolean firstWon:List.of(true,false)) {
+      long id=create(2,2);service.start(id,new PairingService.Start(null,null,60));reveal(id);
+      var g=state(id).rounds.get(0).games.get(0);Long a=g.users.get(0),b=g.users.get(1);
+      var scores=Map.of(a,firstWon?4:1,b,firstWon?1:4);
+      service.result(id,1,0,a,new PairingService.Result(firstWon?"won":"lost",null,0),false);
+      service.result(id,1,0,a,new PairingService.Result(null,scores,0),false);
+      g=state(id).rounds.get(0).games.get(0);
+      assertFalse(g.confirmed);assertEquals(Set.of(a),g.confirmations);assertEquals(scores,g.scores);assertEquals(1,g.votes.size());
+      assertThrows(ResponseStatusException.class,()->service.result(id,1,0,b,new PairingService.Result(null,scores,0),false));
+      service.result(id,1,0,b,new PairingService.Result(firstWon?"lost":"won",null,0),false);
+      assertEquals(Set.of(a),state(id).rounds.get(0).games.get(0).confirmations);
+      service.result(id,1,0,b,new PairingService.Result(null,scores,0),false);
+      assertTrue(state(id).rounds.get(0).games.get(0).confirmed);
+      assertEquals(firstWon?a:b,state(id).rounds.get(0).games.get(0).winnerId);
+    }
+  }
+
+  @Test
+  void earlyScoreConfirmationStillRequiresMatchingResultAndConflictsResetIt() throws Exception {
+    long id=create(2,2);service.start(id,new PairingService.Start(null,null,60));reveal(id);
+    var g=state(id).rounds.get(0).games.get(0);Long a=g.users.get(0),b=g.users.get(1);
+    service.result(id,1,0,a,new PairingService.Result("won",null,0),false);
+    assertThrows(ResponseStatusException.class,()->service.result(id,1,0,a,new PairingService.Result(null,Map.of(a,1,b,4),0),false));
+    assertThrows(ResponseStatusException.class,()->service.result(id,1,0,a,new PairingService.Result(null,Map.of(a,4,b,4),0),false));
+    service.result(id,1,0,a,new PairingService.Result(null,Map.of(a,4,b,1),0),false);
+    service.result(id,1,0,b,new PairingService.Result("won",null,0),false);
+    g=state(id).rounds.get(0).games.get(0);assertEquals(1,g.revision);assertTrue(g.votes.isEmpty());assertTrue(g.scores.isEmpty());assertTrue(g.confirmations.isEmpty());
+  }
+
+  @Test
+  void threeMemberGroupCanRecordAnEarlyScoreButStillNeedsEveryConfirmation() throws Exception {
+    long id=create(3,3);service.start(id,new PairingService.Start(null,null,60));reveal(id);
+    var g=state(id).rounds.get(0).games.get(0);Long a=g.users.get(0),b=g.users.get(1),c=g.users.get(2);var scores=Map.of(a,2,b,4,c,1);
+    service.result(id,1,0,a,new PairingService.Result("lost",null,0),false);service.result(id,1,0,a,new PairingService.Result(null,scores,0),false);
+    service.result(id,1,0,b,new PairingService.Result("won",null,0),false);service.result(id,1,0,b,new PairingService.Result(null,scores,0),false);
+    assertFalse(state(id).rounds.get(0).games.get(0).confirmed);
+    service.result(id,1,0,c,new PairingService.Result("lost",null,0),false);service.result(id,1,0,c,new PairingService.Result(null,scores,0),false);
+    assertTrue(state(id).rounds.get(0).games.get(0).confirmed);
+  }
+
+  @Test
   void changedScoresDiscardPreviousConfirmations() throws Exception {
     long id = create(2, 2);
     service.start(id, new PairingService.Start(null, null, 60));
@@ -343,7 +396,8 @@ class PairingServiceTest {
 
   @Test
   void validatesInitialDivisionAndUsesOnlyFirstProfilePortrait() {
-    assertThrows(ResponseStatusException.class, () -> create(5, 2));
+    long incomplete = create(5, 2);
+    assertThrows(ResponseStatusException.class, () -> service.start(incomplete,new PairingService.Start(null,null,60)));
     var u = User.builder()
       .identifyPhoto(List.of("https://example.com/portrait.jpg", "https://example.com/id-card.jpg"))
       .build();

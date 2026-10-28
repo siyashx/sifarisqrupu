@@ -1,6 +1,6 @@
 package com.codesupreme.sifarisqrupu.advertising;
 import jakarta.persistence.*;import lombok.*;import java.math.BigDecimal;
-@Entity @Getter @Setter @Table(name="community_ad_request",uniqueConstraints=@UniqueConstraint(columnNames={"user_id","request_key"}),indexes=@Index(columnList="status,kind,starts_at,ends_at")) public class AdRequest {
+@Entity @Getter @Setter @Table(name="community_ad_request",uniqueConstraints=@UniqueConstraint(columnNames={"user_id","request_key"}),indexes={@Index(columnList="status,kind,starts_at,ends_at"),@Index(name="idx_ad_user_listing_status",columnList="user_id,listing_id,status")}) public class AdRequest {
  @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
  @Version private long version;
  @Column(name="user_id",nullable=false) private Long userId;
