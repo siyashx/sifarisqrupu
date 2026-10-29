@@ -11,7 +11,7 @@ class AdvertisingIntegrationTest {
  @BeforeEach void setup(){when(users.findById(7L)).thenReturn(Optional.of(User.builder().id(7L).name("Seller").phoneNumber("055 123-45-67").password("private").build()));when(listings.findById(8L)).thenReturn(Optional.of(Elan.builder().id(8L).title("Məhsul").userId(99L).isDisable(false).build()));when(listings.lockForPromotion(8L)).thenAnswer(inv->listings.findById(8L));}
  AdPlan plan(String kind){return service.savePlan(null,new AdvertisingService.PlanForm(kind,"1 gün",24,new BigDecimal("5.00"),null,null,true));}
  AdvertisingService.RequestForm form(AdPlan p,String key){return new AdvertisingService.RequestForm(p.getKind(),"MOTO",p.getId(),8L,"Başlıq","Açıqlama",null,"WHATSAPP",null,System.currentTimeMillis(),key,p.getVersion());}
- @Test void pendingRequestsArePrivateAndApprovalIsIdempotentWithSnapshotPrices(){var p=plan("CHAT");var r=service.request(7L,form(p,"request-key-12345678"));assertEquals("PENDING",r.get("status"));assertTrue(((List<?>)service.feed("MOTO").get("items")).isEmpty());assertEquals("994551234567",r.get("target"));assertEquals(r.get("id"),service.request(7L,form(p,"request-key-12345678")).get("id"));assertEquals(1,requests.count());service.savePlan(p.getId(),new AdvertisingService.PlanForm("CHAT","2 gün",48,new BigDecimal("10.00"),null,null,true));var approved=service.moderate(((Number)r.get("id")).longValue(),"approve");assertEquals(new BigDecimal("5.00"),approved.get("price"));assertEquals(24,approved.get("durationHours"));assertEquals(approved.get("endsAt"),service.moderate(((Number)r.get("id")).longValue(),"approve").get("endsAt"));var feed=(List<Map<String,Object>>)service.feed("MOTO").get("items");assertEquals(1,feed.size());assertFalse(feed.get(0).containsKey("user"));assertTrue(((List<?>)service.feed("SUSHI").get("items")).isEmpty());service.moderate(((Number)r.get("id")).longValue(),"withdraw");assertTrue(((List<?>)service.feed("MOTO").get("items")).isEmpty());verify(fcm,times(1)).enqueue(eq("ADMIN"),eq(List.of(1L)),anyString(),contains("1 gün"),anyMap(),eq(86400),anyString());}
+ @Test void pendingRequestsArePrivateAndApprovalIsIdempotentWithSnapshotPrices(){var p=plan("CHAT");var r=service.request(7L,form(p,"request-key-12345678"));assertEquals("PENDING",r.get("status"));assertTrue(((List<?>)service.feed("MOTO").get("items")).isEmpty());assertEquals("994551234567",r.get("target"));assertEquals(r.get("id"),service.request(7L,form(p,"request-key-12345678")).get("id"));assertEquals(1,requests.count());service.savePlan(p.getId(),new AdvertisingService.PlanForm("CHAT","2 gün",48,new BigDecimal("10.00"),null,null,true));var approved=service.moderate(((Number)r.get("id")).longValue(),"approve");assertEquals(new BigDecimal("5.00"),approved.get("price"));assertEquals(24,approved.get("durationHours"));assertEquals(approved.get("endsAt"),service.moderate(((Number)r.get("id")).longValue(),"approve").get("endsAt"));var feed=(List<Map<String,Object>>)service.feed("MOTO").get("items");assertEquals(1,feed.size());assertFalse(feed.get(0).containsKey("user"));assertEquals(feed,service.feed("SUSHI").get("items"));service.moderate(((Number)r.get("id")).longValue(),"withdraw");assertTrue(((List<?>)service.feed("MOTO").get("items")).isEmpty());verify(fcm,times(1)).enqueue(eq("ADMIN"),eq(List.of(1L)),anyString(),contains("1 gün"),anyMap(),eq(86400),anyString());}
  @Test void promotionCanBeRequestedForAnotherUsersListingButRequiresApproval(){var p=plan("SHOP");var r=service.request(7L,form(p,"shop-request-12345678"));assertEquals(8L,r.get("listingId"));service.moderate(((Number)r.get("id")).longValue(),"reject");assertTrue(((List<?>)service.feed("SUSHI").get("items")).isEmpty());assertThrows(ResponseStatusException.class,()->service.moderate(((Number)r.get("id")).longValue(),"approve"));}
  @Test void approvedPromotionsAppearInBothFeedsAndDisappearWhenListingDisabledOrExpired(){
   var listing=listings.findById(8L).orElseThrow();
@@ -44,19 +44,35 @@ class AdvertisingIntegrationTest {
   assertEquals(2,requests.countByKindAndStatus("CHAT","PENDING"));assertEquals(1,requests.countByKindAndStatus("SHOP","PENDING"));
   service.moderate(((Number)first.get("id")).longValue(),"approve");assertEquals(1,requests.countByKindAndStatus("CHAT","PENDING"));
  }
- @Test void ownChatAdsIncludePendingAndHistoryButNeverAnotherUsersRequestsOrAnotherChannel(){
+ @Test void ownChatAdsIncludeBothSectionsAndHistoryButNeverAnotherUsersRequests(){
   var plan=plan("CHAT");
   long first=((Number)service.request(7L,form(plan,"own-ad-request-111111")).get("id")).longValue();
   service.request(99L,new AdvertisingService.RequestForm("CHAT","MOTO",plan.getId(),null,"Private other ad","",null,"LINK","https://example.com",0,"other-user-request-11111",null));
   service.request(7L,new AdvertisingService.RequestForm("CHAT","SUSHI",plan.getId(),null,"Sushi ad","",null,"WHATSAPP",null,0,"other-channel-1111111",null));
   var rows=(List<Map<String,Object>>)service.mine(7L,"MOTO").get("items");
-  assertEquals(1,rows.size());assertEquals(first,rows.get(0).get("id"));assertEquals("PENDING",rows.get(0).get("displayStatus"));assertFalse(rows.get(0).containsKey("user"));
+  assertEquals(2,rows.size());assertTrue(rows.stream().anyMatch(row->Objects.equals(row.get("id"),first)));assertTrue(rows.stream().allMatch(row->"PENDING".equals(row.get("displayStatus"))&&!row.containsKey("user")));assertEquals(rows,service.mine(7L,"SUSHI").get("items"));
   service.moderate(first,"approve");
-  assertEquals("APPROVED",((List<Map<String,Object>>)service.mine(7L,"MOTO").get("items")).get(0).get("displayStatus"));
+  assertEquals("APPROVED",((List<Map<String,Object>>)service.mine(7L,"MOTO").get("items")).stream().filter(row->Objects.equals(row.get("id"),first)).findFirst().orElseThrow().get("displayStatus"));
   var saved=requests.findById(first).orElseThrow();saved.setEndsAt(System.currentTimeMillis()-1000);requests.saveAndFlush(saved);
-  assertEquals("EXPIRED",((List<Map<String,Object>>)service.mine(7L,"MOTO").get("items")).get(0).get("displayStatus"));
+  assertEquals("EXPIRED",((List<Map<String,Object>>)service.mine(7L,"MOTO").get("items")).stream().filter(row->Objects.equals(row.get("id"),first)).findFirst().orElseThrow().get("displayStatus"));
   assertTrue(((List<?>)service.feed("MOTO").get("items")).stream().map(v->(Map<?,?>)v).noneMatch(v->Objects.equals(v.get("id"),first)));
   assertThrows(ResponseStatusException.class,()->service.mine(7L,"INVALID"));
+ }
+ @Test void approvedChatAdsFromEitherSectionAppearEverywhereAndInactiveAdsDisappear(){
+  var plan=plan("CHAT");
+  long moto=((Number)service.request(7L,form(plan,"shared-moto-12345678")).get("id")).longValue();
+  long sushi=((Number)service.request(7L,new AdvertisingService.RequestForm("CHAT","SUSHI",plan.getId(),null,"Sushi ad","",null,"WHATSAPP",null,0,"shared-sushi-12345678",plan.getVersion())).get("id")).longValue();
+  for(String channel:List.of("MOTO","SUSHI"))assertTrue(((List<?>)service.feed(channel).get("items")).isEmpty());
+  service.moderate(moto,"approve");service.moderate(sushi,"approve");
+  var older=requests.findById(moto).orElseThrow();older.setCreatedAt(System.currentTimeMillis()-5000);requests.saveAndFlush(older);
+  for(String channel:List.of("MOTO","SUSHI")){
+   var rows=(List<Map<String,Object>>)service.feed(channel).get("items");
+   assertEquals(List.of(sushi,moto),rows.stream().map(row->row.get("id")).toList());
+  }
+  service.moderate(moto,"withdraw");
+  for(String channel:List.of("MOTO","SUSHI"))assertEquals(1,((List<?>)service.feed(channel).get("items")).size());
+  var expired=requests.findById(sushi).orElseThrow();expired.setEndsAt(System.currentTimeMillis()-1);requests.saveAndFlush(expired);
+  for(String channel:List.of("MOTO","SUSHI"))assertTrue(((List<?>)service.feed(channel).get("items")).isEmpty());
  }
  AdvertisingService.EditRequest editForm(Map<String,Object> ad){return new AdvertisingService.EditRequest("Yeni başlıq","Yeni mətn","https://example.com/new.png",48,new BigDecimal("7.50"),"SUSHI","LINK","https://example.com",((Number)ad.get("version")).longValue());}
  @Test void adminEditsChatAndPromotionsWithoutRestartingPublicationAndDeletesFromEveryFeed(){

@@ -1,6 +1,6 @@
 # Admin reklam redaktəsi və silinməsi
 
-Admin paneldə çat və elan reklamlarının həm kartında, həm də ətraflı məlumatlarında “Düzəlt” və “Sil” var. Redaktə: başlıq, açıqlama, ImgBB-yə yüklənən şəkil, müddət (gün), qiymət; çat reklamında əlavə olaraq kanal, WhatsApp/link təyinatı. Elan reklamının əsas `listingId` və istifadəçisi dəyişmir, orijinal alqı satqı elanı dəyişdirilmir.
+Admin paneldə çat və elan reklamlarının həm kartında, həm də ətraflı məlumatlarında “Düzəlt” və “Sil” var. Redaktə: başlıq, açıqlama, ImgBB-yə yüklənən şəkil, müddət (gün), qiymət; çat reklamında əlavə olaraq WhatsApp/link təyinatı. Elan reklamının əsas `listingId` və istifadəçisi dəyişmir, orijinal alqı satqı elanı dəyişdirilmir.
 
 Admin API:
 - `PUT /api/v5/push/admin/advertising/requests/{id}`: EditRequest, mövcud `version` mütləqdir. Köhnə versiyadan redaktə 409 qaytarır.
@@ -25,3 +25,11 @@ Admin iştirakçıları `PUT /pairings/{id}/participants` ilə saxlayır. Bu əm
 İlk mərhələ ayrıca `POST /pairings/{id}/start` ilə, admin təsdiqindən sonra başlayır. Başlama zamanı say qrup ölçüsünə tam bölünməli, bütün seçilənlər mövcud və aktiv olmalıdır. Başladıqdan sonra iştirakçıları dəyişmək qadağandır. Sonrakı mərhələlər hesablar təsdiqləndikcə əvvəlki kimi avtomatik davam edir.
 
 Yeniliklər üçün backend deployu, admin tətbiqinin rebuild-i və hər iki mobil tətbiqin yenilənməsi lazımdır. Deploy, commit və push edilməyib.
+
+# Çat reklamlarının bütün bölmələrdə göstərilməsi
+
+CHAT reklamları artıq yaradıldığı kanalla məhdudlaşmır. Təsdiqlənmiş və müddəti bitməmiş bütün çat reklamları Zakaz Qrupu ana səhifəsində və Moto Taksi bölməsində, Ələhbərin Suşi və Moto Taksi çatlarında göstərilir. `channel` köhnə tətbiqlərlə uyğunluq və sorğunun mənbəyi üçün saxlanır; yayımı məhdudlaşdırmır. İstifadəçinin “Reklamlarım” siyahısı da hər iki kanal üzrə öz çat reklamlarını birgə göstərir. Başqa istifadəçinin şəxsi sorğuları göstərilmir.
+
+Mobil tətbiqlərdə hər beşinci mesajdan sonra, son tam beşlik daxil olmaqla reklam yerləşdirilir. Aktiv reklamlar yaranma tarixinə görə yenidən köhnəyə doğru dövr edir. Şəkil kəsilmədən göstərilir, hündürlüyü ekranın 40%-i ilə (180–320 məntiqi piksel aralığında) məhdudlaşır və toxunanda böyüdülə bilir. Backend deployu və hər iki tətbiqin yenidən build edilməsi tələb olunur.
+
+Admin yaratma/redaktə formasında çat bölməsi seçimi çıxarılıb. Mobil formada da ayrıca Suşi/Moto Taksi bölməsi adı göstərilmir; mətn “Bütün çatlarda hər 5 mesajdan bir görünəcək” şəklindədir.

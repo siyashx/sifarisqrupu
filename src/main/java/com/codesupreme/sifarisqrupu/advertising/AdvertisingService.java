@@ -42,7 +42,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;import org.sprin
  @Transactional(readOnly=true) public Map<String,Object> mine(Long user,String channel){
    require(Set.of("SUSHI","MOTO").contains(channel),"Çat bölməsini yoxlayın.");
    long now=System.currentTimeMillis();
-   var rows=requests.findTop50ByUserIdAndKindAndChannelAndStatusNotOrderByCreatedAtDescIdDesc(user,"CHAT",channel,"DELETED").stream().map(a->{
+   var rows=requests.findTop50ByUserIdAndKindAndStatusNotOrderByCreatedAtDescIdDesc(user,"CHAT","DELETED").stream().map(a->{
      var result=view(a,false);
      result.put("displayStatus","APPROVED".equals(a.getStatus()) && a.getEndsAt()!=null && a.getEndsAt()<=now?"EXPIRED":a.getStatus());
      return result;
@@ -63,7 +63,8 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;import org.sprin
    var active=requests.findByStatusAndStartsAtLessThanEqualAndEndsAtGreaterThanOrderByCreatedAtDesc("APPROVED",now,now);
    var listingIds=active.stream().filter(a->"SHOP".equals(a.getKind())).map(AdRequest::getListingId).filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
    var validListings=listings.findAllById(listingIds).stream().filter(e->!Boolean.TRUE.equals(e.getIsDisable())).map(e->e.getId()).collect(java.util.stream.Collectors.toSet());
-   var rows=active.stream().filter(a->"SHOP".equals(a.getKind())||Objects.equals(channel,a.getChannel()))
+   // CHAT advertising is shared across both applications and chat sections.
+   var rows=active.stream()
      .filter(a->!"SHOP".equals(a.getKind())||validListings.contains(a.getListingId())).map(a->view(a,false)).toList();
    var counts = new LinkedHashMap<String,Long>();
    for (String section : List.of("SHOP","SUSHI","MOTO")) counts.put(section,0L);

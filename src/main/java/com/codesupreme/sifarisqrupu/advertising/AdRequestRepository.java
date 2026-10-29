@@ -7,6 +7,6 @@ public interface AdRequestRepository extends JpaRepository<AdRequest,Long> {
  Optional<AdRequest> findByUserIdAndRequestKey(Long userId,String key);
  List<AdRequest> findByStatusAndStartsAtLessThanEqualAndEndsAtGreaterThanOrderByCreatedAtDesc(String status,long now,long after);
  List<AdRequest> findAllByOrderByCreatedAtDesc();
- List<AdRequest> findTop50ByUserIdAndKindAndChannelAndStatusNotOrderByCreatedAtDescIdDesc(Long userId,String kind,String channel,String excludedStatus);
+ List<AdRequest> findTop50ByUserIdAndKindAndStatusNotOrderByCreatedAtDescIdDesc(Long userId,String kind,String excludedStatus);
  @Lock(LockModeType.PESSIMISTIC_WRITE) @Query("select a from AdRequest a where a.id=:id") Optional<AdRequest> lock(@Param("id") Long id);
 }
