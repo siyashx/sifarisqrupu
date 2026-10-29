@@ -14,6 +14,8 @@ import java.util.List;
 public class ChatDto {
 
     private Long id;
+    private Long advertisingSequence;
+    private Long advertisingCombinedSequence;
     private String groupId;
     private Long userId;
     private String username;

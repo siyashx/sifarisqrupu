@@ -30,6 +30,14 @@ Yeniliklər üçün backend deployu, admin tətbiqinin rebuild-i və hər iki mo
 
 CHAT reklamları artıq yaradıldığı kanalla məhdudlaşmır. Təsdiqlənmiş və müddəti bitməmiş bütün çat reklamları Zakaz Qrupu ana səhifəsində və Moto Taksi bölməsində, Ələhbərin Suşi və Moto Taksi çatlarında göstərilir. `channel` köhnə tətbiqlərlə uyğunluq və sorğunun mənbəyi üçün saxlanır; yayımı məhdudlaşdırmır. İstifadəçinin “Reklamlarım” siyahısı da hər iki kanal üzrə öz çat reklamlarını birgə göstərir. Başqa istifadəçinin şəxsi sorğuları göstərilmir.
 
-Mobil tətbiqlərdə hər beşinci mesajdan sonra, son tam beşlik daxil olmaqla reklam yerləşdirilir. Aktiv reklamlar yaranma tarixinə görə yenidən köhnəyə doğru dövr edir. Şəkil kəsilmədən göstərilir, hündürlüyü ekranın 40%-i ilə (180–320 məntiqi piksel aralığında) məhdudlaşır və toxunanda böyüdülə bilir. Backend deployu və hər iki tətbiqin yenidən build edilməsi tələb olunur.
+Mobil tətbiqlərdə hər beşinci mesajdan sonra, son tam beşlik daxil olmaqla reklam yerləşdirilir. Aktiv reklamlar yaranma tarixinə görə yenidən köhnəyə doğru dövr edir. Şəkil kəsilmədən göstərilir, hündürlüyü 100 məntiqi piksellə məhdudlaşır və toxunanda böyüdülə bilir. Backend deployu və hər iki tətbiqin yenidən build edilməsi tələb olunur.
 
 Admin yaratma/redaktə formasında çat bölməsi seçimi çıxarılıb. Mobil formada da ayrıca Suşi/Moto Taksi bölməsi adı göstərilmir; mətn “Bütün çatlarda hər 5 mesajdan bir görünəcək” şəklindədir.
+
+Çat reklamının başlığı iki sətir, açıqlaması iki sətir göstərilir. “Davamını oxu” bütün açıqlamanı ayrıca pəncərədə açır; uzun mətn kartı böyütmür. Tarix ayırıcıları və reklamlar beşlik hesabına daxil deyil, siyahıdakı adi mesajlar 5, 10, 15… sırası ilə sayılır.
+
+# Sabit reklam mövqeyi və sürüşən tarixçə
+
+Mobil çat səhifələri yalnız son mesajları yüklədiyi üçün siyahının lokal 0…14 indeksi reklam yeri kimi istifadə edilmir. `ChatDto.advertisingSequence` tək çat qrupundakı ümumi sıra nömrəsidir; `advertisingCombinedSequence` 0 və 1 qruplarının birləşmiş Zakaz Qrupu / Suşi axınındakı sıra nömrəsidir. Limitli tarixçə sorğusu bir səhifə və bir əvvəlki mesaj sayı sorğusu ilə qlobal sıra nömrələrini verir. Canlı yaradılma, tək mesaj və redaktə cavabları da sıra nömrələrini qaytarır.
+
+Hər iki tətbiqin əsas/Suşi axınında birləşmiş, Moto Taksi çatında tək qrup sırası istifadə olunur. Reklam 5, 10, 15… nömrəli mesajdan sonra gəlir. Yeni mesaj əlavə ediləndə 15-lik görünən pəncərənin başlanğıcı dəyişsə də, qalan mesajların reklam yerləri dəyişmir. Köhnə backend sıra nömrəsi qaytarmırsa müvəqqəti indeksdən səhv reklam göstərmək əvəzinə həmin mesajda reklam göstərilmir. Bu düzəliş üçün backend deployu və hər iki tətbiqin rebuild-i mütləqdir; DB-yə sütun əlavə olunmur.

@@ -28,12 +28,24 @@ public class ChatServiceImpl implements ChatServiceInter {
         this.modelMapper = modelMapper;
     }
 
+    private ChatDto positioned(Chat chat) {
+        ChatDto dto = modelMapper.map(chat, ChatDto.class);
+        if (chat.getId() == null || chat.getGroupId() == null) return dto;
+        dto.setAdvertisingSequence(chatRepository.countByGroupIdInAndIdLessThan(
+                List.of(chat.getGroupId()), chat.getId()) + 1);
+        if ("0".equals(chat.getGroupId()) || "1".equals(chat.getGroupId())) {
+            dto.setAdvertisingCombinedSequence(chatRepository.countByGroupIdInAndIdLessThan(
+                    List.of("0", "1"), chat.getId()) + 1);
+        }
+        return dto;
+    }
+
     @Override
     public ChatDto createChat(ChatDto chatDto) {
         Chat chat = modelMapper.map(chatDto, Chat.class);
         chat = chatRepository.save(chat);
 
-        return modelMapper.map(chat, ChatDto.class);
+        return positioned(chat);
     }
 
     @Override
@@ -45,6 +57,7 @@ public class ChatServiceImpl implements ChatServiceInter {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<ChatDto> getLatestChats(List<String> groupIds, int limit) {
         int safeLimit = Math.max(1, Math.min(limit, 200)); // max 200
         Pageable pageable = PageRequest.of(0, safeLimit);
@@ -60,15 +73,27 @@ public class ChatServiceImpl implements ChatServiceInter {
         List<Chat> asc = new ArrayList<>(chats);
         java.util.Collections.reverse(asc);
 
-        return asc.stream()
-                .map(chat -> modelMapper.map(chat, ChatDto.class))
-                .collect(java.util.stream.Collectors.toList());
+        if (asc.isEmpty()) return List.of();
+        // The offset belongs to the entire selected conversation, not its latest page.
+        long position = groupIds == null || groupIds.isEmpty()
+                ? chatRepository.countByIdLessThan(asc.get(0).getId())
+                : chatRepository.countByGroupIdInAndIdLessThan(groupIds, asc.get(0).getId());
+        boolean combined = groupIds != null && groupIds.size() == 2
+                && groupIds.containsAll(List.of("0", "1"));
+        List<ChatDto> result = new ArrayList<>();
+        for (Chat chat : asc) {
+            ChatDto dto = modelMapper.map(chat, ChatDto.class);
+            if (combined) dto.setAdvertisingCombinedSequence(++position);
+            else dto.setAdvertisingSequence(++position);
+            result.add(dto);
+        }
+        return result;
     }
 
     @Override
     public ChatDto getChatById(Long chatId) {
         Optional<Chat> chatOptional = chatRepository.findById(chatId);
-        return chatOptional.map(chat -> modelMapper.map(chat, ChatDto.class)).orElse(null);
+        return chatOptional.map(this::positioned).orElse(null);
     }
 
     @Override
@@ -156,7 +181,7 @@ public class ChatServiceImpl implements ChatServiceInter {
 
             chat = chatRepository.save(chat);
 
-            return modelMapper.map(chat, ChatDto.class);
+            return positioned(chat);
         }
         return null;
     }
