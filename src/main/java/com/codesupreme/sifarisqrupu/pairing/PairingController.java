@@ -36,6 +36,15 @@ public class PairingController {
     return service.detail(id, auth.requireUser(key).getId());
   }
 
+  @GetMapping(value = "/{id}/participants/{participant}/contact", produces = "application/json")
+  public PairingService.ParticipantContact participantContact(
+    @RequestHeader(value = "Authorization", required = false) String key,
+    @PathVariable Long id,
+    @PathVariable Long participant
+  ) {
+    return service.participantContact(id, auth.requireUser(key).getId(), participant);
+  }
+
   @PostMapping("/{id}/rounds/{round}/games/{game}/result")
   public Map<String, Object> result(
     @RequestHeader(value = "Authorization", required = false) String key,

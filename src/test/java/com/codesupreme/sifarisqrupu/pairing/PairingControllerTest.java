@@ -16,6 +16,28 @@ import org.springframework.web.server.ResponseStatusException;
 class PairingControllerTest {
 
   @Test
+  void contactUsesAuthenticatedIdentityAndReturnsOnlyContactFields() throws Exception {
+    var auth = mock(PushAuth.class);
+    when(auth.requireUser("member")).thenReturn(User.builder().id(7L).build());
+    var service = mock(PairingService.class);
+    when(service.participantContact(1L, 7L, 2L)).thenReturn(
+      new PairingService.ParticipantContact(2L, "Elvin", "0551234567")
+    );
+    var mvc = MockMvcBuilders.standaloneSetup(new PairingController(auth, service))
+      .setControllerAdvice(new PairingErrors()).build();
+    mvc.perform(get("/api/v5/pairings/1/participants/2/contact?userId=99")
+      .header("Authorization", "member"))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.phoneNumber").value("0551234567"))
+      .andExpect(jsonPath("$.password").doesNotExist());
+    verify(service).participantContact(1L, 7L, 2L);
+    when(auth.requireUser("outsider")).thenReturn(User.builder().id(99L).build());
+    when(service.participantContact(1L, 99L, 2L)).thenThrow(new ResponseStatusException(HttpStatus.FORBIDDEN));
+    mvc.perform(get("/api/v5/pairings/1/participants/2/contact")
+      .header("Authorization", "outsider")).andExpect(status().isForbidden());
+  }
+
+  @Test
   void adminActionsCannotBeInvokedWithMemberCredentialsAndResultIdentityComesFromAuth()
     throws Exception {
     var auth = mock(PushAuth.class);

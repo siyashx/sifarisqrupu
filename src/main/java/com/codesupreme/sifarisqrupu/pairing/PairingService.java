@@ -75,6 +75,30 @@ public class PairingService {
 
   public record Person(Long id, String name, String avatarUrl) {}
 
+  public record ParticipantContact(Long id, String name, String phoneNumber) {}
+
+  @Transactional(readOnly = true)
+  public ParticipantContact participantContact(Long id, Long viewer, Long participant) {
+    var roster = state(get(id)).participants;
+    if (viewer == null || !roster.contains(viewer) || Objects.equals(viewer, participant)) {
+      throw new ResponseStatusException(
+        HttpStatus.FORBIDDEN,
+        "Əlaqə yalnız çempionatın digər iştirakçıları üçün mümkündür."
+      );
+    }
+    if (participant == null || !roster.contains(participant)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "İştirakçı tapılmadı.");
+    }
+    var user = users.findById(participant).orElseThrow(() ->
+      new ResponseStatusException(HttpStatus.NOT_FOUND, "İştirakçı tapılmadı.")
+    );
+    String phone = clean(user.getPhoneNumber());
+    if (phone.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "İştirakçının telefon nömrəsi yoxdur.");
+    }
+    return new ParticipantContact(user.getId(), clean(user.getName()), phone);
+  }
+
   private static void require(boolean ok, String message) {
     if (!ok) throw new ResponseStatusException(HttpStatus.CONFLICT, message);
   }

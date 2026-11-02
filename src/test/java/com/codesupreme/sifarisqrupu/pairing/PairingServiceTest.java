@@ -83,6 +83,41 @@ class PairingServiceTest {
     ).longValue();
   }
 
+  @Test
+  void contactIsRestrictedToOtherMembersOfTheSameChampionship() {
+    long id = create(4, 2);
+    when(users.findById(2L)).thenReturn(Optional.of(
+      User.builder().id(2L).name("Elvin").phoneNumber("0551234567").password("private").build()
+    ));
+    var contact = service.participantContact(id, 1L, 2L);
+    assertEquals(2L, contact.id());
+    assertEquals("Elvin", contact.name());
+    assertEquals("0551234567", contact.phoneNumber());
+    assertEquals(3, PairingService.ParticipantContact.class.getRecordComponents().length);
+    for (Long viewer : Arrays.asList(null, 99L, 2L)) {
+      var denied = assertThrows(ResponseStatusException.class,
+        () -> service.participantContact(id, viewer, 2L));
+      assertEquals(403, denied.getStatusCode().value());
+    }
+    var outsider = assertThrows(ResponseStatusException.class,
+      () -> service.participantContact(id, 1L, 99L));
+    assertEquals(404, outsider.getStatusCode().value());
+    verify(users, never()).findById(99L);
+  }
+
+  @Test
+  void contactRejectsDeletedChampionshipAndUnavailablePhone() {
+    long id = create(2, 2);
+    when(users.findById(2L)).thenReturn(Optional.empty());
+    assertThrows(ResponseStatusException.class, () -> service.participantContact(id, 1L, 2L));
+    when(users.findById(2L)).thenReturn(Optional.of(User.builder().id(2L).phoneNumber(" ").build()));
+    assertThrows(ResponseStatusException.class, () -> service.participantContact(id, 1L, 2L));
+    db.get(id).setDeleted(true);
+    var deleted = assertThrows(ResponseStatusException.class,
+      () -> service.participantContact(id, 1L, 2L));
+    assertEquals(404, deleted.getStatusCode().value());
+  }
+
   PairingState state(long id) throws Exception {
     return json.readValue(db.get(id).getStateJson(), PairingState.class);
   }
