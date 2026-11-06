@@ -11,6 +11,7 @@ import org.springframework.web.server.ResponseStatusException;
     "com.codesupreme.sifarisqrupu.live",
     "com.codesupreme.sifarisqrupu.community",
     "com.codesupreme.sifarisqrupu.advertising",
+    "com.codesupreme.sifarisqrupu.adminusers",
   }
 )
 public class PairingErrors {
